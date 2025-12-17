@@ -1,0 +1,122 @@
+# Brain 系统默认配置
+
+system:
+  name: "Brain-Autonomous-System"
+  version: "1.0.0"
+  log_level: "INFO"
+  max_concurrent_tasks: 10
+  heartbeat_interval: 1.0  # seconds
+
+# LLM配置
+# 支持的provider: openai, anthropic, ollama, local, azure, custom
+llm:
+  # === 使用Ollama本地模型（推荐） ===
+  provider: "ollama"
+  model: "deepseek-r1:latest"  # 或其他Ollama模型如: llama3, qwen2, mistral
+  api_base: "http://localhost:11434"  # Ollama默认地址
+  
+  # === 或使用OpenAI ===
+  # provider: "openai"
+  # model: "gpt-4"
+  # api_key_env: "OPENAI_API_KEY"
+  
+  # === 或使用Anthropic ===
+  # provider: "anthropic"  
+  # model: "claude-3-opus-20240229"
+  # api_key_env: "ANTHROPIC_API_KEY"
+  
+  # 通用参数
+  max_tokens: 4096
+  temperature: 0.1
+  timeout: 120  # Ollama本地模型可能需要更长时间
+  retry_count: 3
+  retry_delay: 1.0
+
+# 感知模块配置
+perception:
+  update_rate: 10.0  # Hz
+  sensors:
+    camera:
+      enabled: true
+      resolution: [1920, 1080]
+      fps: 30
+    lidar:
+      enabled: true
+      range: 100.0  # meters
+      points_per_second: 300000
+    gps:
+      enabled: true
+      accuracy: 0.01  # meters
+    imu:
+      enabled: true
+      rate: 100  # Hz
+
+# 平台配置
+platforms:
+  drone:
+    enabled: true
+    max_speed: 15.0  # m/s
+    max_altitude: 120.0  # meters
+    battery_warning: 20  # percent
+    battery_critical: 10
+    safe_distance: 5.0  # meters
+  ugv:  # 无人车
+    enabled: true
+    max_speed: 5.0  # m/s
+    battery_warning: 20
+    battery_critical: 10
+    safe_distance: 2.0
+  usv:  # 无人船
+    enabled: true
+    max_speed: 8.0  # m/s (knots * 0.514)
+    battery_warning: 20
+    battery_critical: 10
+    safe_distance: 10.0
+
+# 任务规划配置
+planning:
+  max_retries: 3
+  timeout: 300  # seconds
+  checkpoint_interval: 5  # 每5个操作保存一次检查点
+  enable_parallel: true
+  max_parallel_operations: 3
+
+# 错误恢复配置
+recovery:
+  enabled: true
+  max_rollback_steps: 10
+  replan_on_failure: true
+  safe_mode_on_critical: true
+  error_thresholds:
+    warning: 3
+    critical: 5
+
+# 通信配置
+communication:
+  protocol: "zmq"  # zmq, grpc, ros2
+  command_port: 5555
+  telemetry_port: 5556
+  heartbeat_timeout: 5.0
+  message_queue_size: 1000
+
+# 状态管理配置
+state:
+  persistence: true
+  storage_path: "./data/state"
+  checkpoint_path: "./data/checkpoints"
+  history_length: 1000
+
+# 安全约束
+safety:
+  geofence:
+    enabled: true
+    default_radius: 500.0  # meters
+  no_fly_zones: []
+  emergency_procedures:
+    - condition: "battery_critical"
+      action: "return_to_home"
+    - condition: "communication_lost"
+      action: "hover_and_wait"
+    - condition: "obstacle_detected"
+      action: "stop_and_avoid"
+

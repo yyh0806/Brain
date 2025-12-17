@@ -1,0 +1,162 @@
+# ROS2感知驱动系统配置
+# ROS2 Perception-Driven System Configuration
+
+# ROS2节点配置
+ros2:
+  node_name: "brain_node"
+  # 运行模式: real (真实ROS2环境) 或 simulation (模拟模式)
+  mode: "real"
+  
+  # 话题配置 - 根据您的机器人修改
+  topics:
+    cmd_vel: "/car3/twist"
+    rgb_image: "/car3/rgbImage"
+    depth_image: "/car3/depthImage"
+    laser_scan: "/scan"
+    pointcloud: "/car3/lidar_points"  # 激光雷达点云
+    odom: "/car3/car_info"  # 从car_info中解析position和orientation
+    imu: "/imu/data"
+    map: "/map"
+  
+  # QoS配置
+  qos:
+    sensor_depth: 10
+    cmd_depth: 10
+
+# 感知配置
+perception:
+  # VLM视觉语言模型
+  vlm:
+    enabled: true
+    provider: "ollama"
+    model: "llava:7b"  # 或 "minicpm-v:latest", "llava:13b"
+    ollama_host: "http://localhost:11434"
+    scene_analysis_interval: 3.5  # 秒，VLM分析间隔（基于实测延迟，建议3.5秒或使用1/2分辨率）
+    image_resolution: "1/2"  # 可选: "original", "1/2", "1/4" (降低分辨率可提高速度)
+  
+  # 占据栅格地图
+  occupancy:
+    grid_resolution: 0.1  # 米/栅格
+    map_size: 50.0  # 地图大小（米）
+    camera_fx: 525.0
+    camera_fy: 525.0
+    camera_cx: 320.0
+    camera_cy: 240.0
+    min_depth: 0.1
+    max_depth: 10.0
+  
+  # YOLO目标检测（可选）
+  yolo:
+    enabled: false
+    model: "yolov8n.pt"
+    confidence_threshold: 0.5
+  
+  # 传感器融合
+  fusion:
+    pose_filter_alpha: 0.8
+    obstacle_threshold: 0.5
+    min_obstacle_size: 0.1
+    max_history: 100
+
+# 导航配置
+navigation:
+  # 探索配置
+  exploration:
+    enabled: true
+    max_exploration_time: 300  # 秒
+    max_single_search_time: 30
+    exploration_pattern: "frontier"  # spiral, frontier, random
+    max_exploration_steps: 50
+    vlm_interval: 3.5  # VLM分析间隔（与perception.vlm.scene_analysis_interval一致）
+  
+  # 平滑执行配置
+  smooth_execution:
+    control_rate: 10.0  # Hz
+    perception_update_rate: 2.0  # Hz
+    vlm_analysis_interval: 3.5  # 秒
+    obstacle_check_distance: 1.0  # 米
+    emergency_stop_distance: 0.3  # 米
+    speed_adjustment_factor: 0.8
+    min_speed: 0.1  # m/s
+    max_speed: 0.5  # m/s
+  
+  # 路口导航配置
+  intersection:
+    detection_distance: 5.0  # 米
+    turn_radius: 2.0  # 米
+    approach_speed: 0.3  # m/s
+    turn_speed: 0.3  # m/s
+    exit_speed: 0.5  # m/s
+  
+  # 运动参数
+  motion:
+    exploration_speed: 0.3  # m/s
+    approach_speed: 0.2     # m/s
+    normal_speed: 0.5       # m/s
+    
+  # 安全距离
+  safety:
+    target_arrival_distance: 1.0  # 米，到达判定距离
+    obstacle_distance: 0.5        # 米，障碍物距离
+    emergency_stop_distance: 0.3  # 米，紧急停止距离
+
+# 机器人平台配置
+robot:
+  name: "UGV_Car3"
+  type: "ugv"  # ugv, drone, usv
+  platform_type: "ackermann"  # ackermann (如car3) 或 differential (如car0)
+  
+  # 运动学限制
+  kinematics:
+    max_linear_speed: 1.0    # m/s
+    max_angular_speed: 1.0   # rad/s
+    max_acceleration: 0.5    # m/s²
+    max_climb_angle: 0.3     # rad
+    min_turn_radius: 0.0     # m (0 = 可原地转向)
+    wheelbase: 2.0           # m (Ackermann用)
+    track_width: 1.0         # m (Differential用)
+  
+  # 传感器配置
+  sensors:
+    - "rgb_camera"
+    - "depth_camera"
+    - "lidar_2d"
+    - "imu"
+  
+  # 感知范围
+  perception_range:
+    camera_range: 10.0       # 米
+    camera_fov: 1.57         # rad (90度)
+    lidar_range: 30.0        # 米
+    lidar_fov: 6.28          # rad (360度)
+
+# 语义世界模型配置
+world_model:
+  grid_resolution: 0.5       # 米/栅格
+  position_threshold: 2.0    # 米，物体匹配阈值
+  object_max_age: 120.0      # 秒，物体过期时间
+  max_history: 50
+  max_pose_history: 1000     # 位姿轨迹历史长度
+
+# LLM配置（用于任务分解）
+llm:
+  provider: "ollama"
+  model: "deepseek-r1:latest"  # 或其他模型
+  api_base: "http://localhost:11434"
+  max_tokens: 4096
+  temperature: 0.1
+  timeout: 120
+
+# 对话配置
+dialogue:
+  enabled: true
+  max_history: 50
+  confirmation_required: true  # 关键操作是否需要确认
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/brain.log"
+  rotation: "10 MB"
+  retention: "7 days"
+
