@@ -1,20 +1,30 @@
 """
-链式思维推理引擎 - Chain of Thought Engine
+链式思维推理引擎 - Chain of Thought Engine (优化版)
 
 负责：
 - 执行链式思维推理，生成可追溯的决策链
 - 自适应决定推理深度（简单任务快速执行，复杂任务深度推理）
 - 结合感知上下文进行情境感知推理
 - 支持多种推理模式：规划、重规划、异常处理
+- 智能缓存推理结果，提升响应性能
 """
 
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import json
 import re
+import hashlib
 from loguru import logger
+
+# 导入缓存管理器
+try:
+    from brain.utils.cache_manager import get_cache_manager, cached_async
+    CACHE_AVAILABLE = True
+except ImportError:
+    logger.warning("缓存管理器不可用，推理引擎将运行在无缓存模式")
+    CACHE_AVAILABLE = False
 
 
 class ReasoningMode(Enum):
@@ -128,23 +138,44 @@ class CoTEngine:
         self,
         llm_interface: Optional[Any] = None,
         cot_prompts: Optional[Any] = None,
-        default_complexity_threshold: float = 0.5
+        default_complexity_threshold: float = 0.5,
+        enable_caching: bool = True
     ):
         """
         Args:
             llm_interface: LLM接口
             cot_prompts: CoT提示词模板
             default_complexity_threshold: 默认复杂度阈值
+            enable_caching: 是否启用缓存
         """
         self.llm = llm_interface
         self.cot_prompts = cot_prompts
         self.complexity_threshold = default_complexity_threshold
-        
+        self.enable_caching = enable_caching and CACHE_AVAILABLE
+
         # 推理历史
         self.reasoning_history: List[ReasoningResult] = []
         self.max_history = 50
-        
-        logger.info("CoTEngine 初始化完成")
+
+        # 缓存设置
+        if self.enable_caching:
+            self.cache_manager = get_cache_manager()
+            # 创建专用推理缓存
+            self.reasoning_cache = self.cache_manager.create_cache(
+                name="reasoning_results",
+                cache_type="lru",
+                max_size=1000,
+                ttl_seconds=1800  # 30分钟
+            )
+            self.complexity_cache = self.cache_manager.create_cache(
+                name="complexity_assessment",
+                cache_type="lru",
+                max_size=2000,
+                ttl_seconds=300  # 5分钟
+            )
+            logger.info("CoTEngine 初始化完成 (缓存已启用)")
+        else:
+            logger.info("CoTEngine 初始化完成 (缓存已禁用)")
     
     async def reason(
         self,
@@ -154,22 +185,34 @@ class CoTEngine:
         force_cot: bool = False
     ) -> ReasoningResult:
         """
-        执行推理
-        
+        执行推理 (优化版 - 支持缓存)
+
         Args:
             query: 推理问题/任务
             context: 上下文信息（包含感知数据）
             mode: 推理模式
             force_cot: 强制使用完整CoT
-            
+
         Returns:
             ReasoningResult: 包含思维链和最终决策
         """
-        # 评估复杂度
+        # 生成缓存键
+        cache_key = self._generate_reasoning_cache_key(query, context, mode, force_cot)
+
+        # 尝试从缓存获取结果
+        if self.enable_caching:
+            cached_result = self.reasoning_cache.get(cache_key)
+            if cached_result is not None:
+                logger.debug(f"CoT推理缓存命中: {cache_key[:20]}...")
+                # 更新缓存结果的时间戳
+                cached_result.timestamp = datetime.now()
+                return cached_result
+
+        # 评估复杂度 (支持缓存)
         complexity = self.assess_complexity(query, context)
-        
+
         logger.info(f"CoT推理: mode={mode.value}, complexity={complexity.value}, query={query[:50]}...")
-        
+
         # 根据复杂度决定推理策略
         if complexity == ComplexityLevel.SIMPLE and not force_cot:
             result = await self._quick_reasoning(query, context, mode)
@@ -177,27 +220,95 @@ class CoTEngine:
             result = await self._full_cot_reasoning(query, context, mode)
         else:  # CRITICAL
             result = await self._deep_cot_reasoning(query, context, mode)
-        
+
+        # 缓存结果 (仅缓存置信度较高的结果)
+        if self.enable_caching and result.confidence > 0.7:
+            # 克隆结果避免外部修改
+            cached_result = ReasoningResult(
+                mode=result.mode,
+                query=result.query,
+                context_summary=result.context_summary,
+                complexity=result.complexity,
+                chain=result.chain.copy(),
+                decision=result.decision,
+                suggestion=result.suggestion,
+                confidence=result.confidence,
+                raw_response=result.raw_response,
+                timestamp=result.timestamp,
+                metadata=result.metadata.copy()
+            )
+            self.reasoning_cache.set(cache_key, cached_result)
+            logger.debug(f"CoT推理结果已缓存: {cache_key[:20]}...")
+
         # 记录到历史
         self.reasoning_history.append(result)
         if len(self.reasoning_history) > self.max_history:
             self.reasoning_history = self.reasoning_history[-self.max_history:]
-        
+
         return result
+
+    def _generate_reasoning_cache_key(self, query: str, context: Dict[str, Any], mode: ReasoningMode, force_cot: bool) -> str:
+        """生成推理缓存键"""
+        # 提取关键的上下文信息用于缓存键
+        key_context = {
+            "robot_position": context.get("current_position", {}),
+            "obstacles_count": len(context.get("obstacles", [])) if isinstance(context.get("obstacles"), list) else 0,
+            "targets_count": len(context.get("targets", [])) if isinstance(context.get("targets", []), list) else 0,
+            "battery_level": context.get("battery_level", 100),
+            "constraints": context.get("constraints", [])[:3],  # 只取前3个约束
+        }
+
+        # 生成哈希
+        key_data = {
+            "query": query[:100],  # 限制查询长度
+            "mode": mode.value,
+            "force_cot": force_cot,
+            "context": key_context
+        }
+
+        key_str = json.dumps(key_data, sort_keys=True)
+        return hashlib.md5(key_str.encode()).hexdigest()
     
     def assess_complexity(self, query: str, context: Dict[str, Any]) -> ComplexityLevel:
         """
-        评估问题复杂度
-        
+        评估问题复杂度 (优化版 - 支持缓存)
+
         Args:
             query: 问题/任务
             context: 上下文
-            
+
         Returns:
             ComplexityLevel: 复杂度等级
         """
+        # 尝试从缓存获取复杂度评估结果
+        if self.enable_caching:
+            complexity_key = self._generate_complexity_cache_key(query, context)
+            cached_complexity = self.complexity_cache.get(complexity_key)
+            if cached_complexity is not None:
+                logger.debug(f"复杂度评估缓存命中: {complexity_key[:20]}...")
+                return cached_complexity
+
+        # 计算复杂度分数
+        score = self._calculate_complexity_score(query, context)
+
+        # 确定复杂度等级
+        for level, threshold in sorted(self.COMPLEXITY_THRESHOLDS.items(), key=lambda x: x[1]):
+            if score <= threshold:
+                complexity = level
+                break
+        else:
+            complexity = ComplexityLevel.CRITICAL
+
+        # 缓存复杂度评估结果
+        if self.enable_caching:
+            self.complexity_cache.set(complexity_key, complexity)
+
+        return complexity
+
+    def _calculate_complexity_score(self, query: str, context: Dict[str, Any]) -> float:
+        """计算复杂度分数"""
         score = 0.0
-        
+
         # 障碍物数量
         obstacles = context.get("obstacles", [])
         if isinstance(obstacles, int):
@@ -205,7 +316,7 @@ class CoTEngine:
         else:
             obstacle_count = len(obstacles) if obstacles else 0
         score += min(obstacle_count / 10, 1.0) * self.COMPLEXITY_WEIGHTS["obstacles_count"]
-        
+
         # 目标数量
         targets = context.get("targets", [])
         if isinstance(targets, int):
@@ -213,31 +324,41 @@ class CoTEngine:
         else:
             target_count = len(targets) if targets else 0
         score += min(target_count / 5, 1.0) * self.COMPLEXITY_WEIGHTS["targets_count"]
-        
+
         # 约束数量
         constraints = context.get("constraints", [])
         constraint_count = len(constraints) if constraints else 0
         score += min(constraint_count / 5, 1.0) * self.COMPLEXITY_WEIGHTS["constraints_count"]
-        
+
         # 最近变化
         changes = context.get("recent_changes", [])
         change_count = len(changes) if changes else 0
         score += min(change_count / 3, 1.0) * self.COMPLEXITY_WEIGHTS["recent_changes"]
-        
+
         # 指令长度（越长可能越复杂）
         score += min(len(query) / 200, 1.0) * self.COMPLEXITY_WEIGHTS["command_length"]
-        
+
         # 模糊度评估（简化：检查不确定词汇）
         ambiguous_words = ["那边", "附近", "差不多", "大概", "可能", "或者", "应该"]
         ambiguity = sum(1 for word in ambiguous_words if word in query) / len(ambiguous_words)
         score += ambiguity * self.COMPLEXITY_WEIGHTS["ambiguity_score"]
-        
-        # 确定复杂度等级
-        for level, threshold in sorted(self.COMPLEXITY_THRESHOLDS.items(), key=lambda x: x[1]):
-            if score <= threshold:
-                return level
-        
-        return ComplexityLevel.CRITICAL
+
+        return score
+
+    def _generate_complexity_cache_key(self, query: str, context: Dict[str, Any]) -> str:
+        """生成复杂度评估缓存键"""
+        # 提取影响复杂度的关键因素
+        key_data = {
+            "query_length": len(query),
+            "has_ambiguous_words": any(word in query for word in ["那边", "附近", "差不多", "大概", "可能", "或者", "应该"]),
+            "obstacles_count": len(context.get("obstacles", [])) if isinstance(context.get("obstacles"), list) else 0,
+            "targets_count": len(context.get("targets", [])) if isinstance(context.get("targets", []), list) else 0,
+            "constraints_count": len(context.get("constraints", [])) if context.get("constraints") else 0,
+            "recent_changes_count": len(context.get("recent_changes", [])) if context.get("recent_changes") else 0,
+        }
+
+        key_str = json.dumps(key_data, sort_keys=True)
+        return hashlib.md5(key_str.encode()).hexdigest()
     
     async def _quick_reasoning(
         self,
@@ -684,4 +805,56 @@ class CoTEngine:
     def clear_history(self):
         """清除推理历史"""
         self.reasoning_history.clear()
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """获取缓存统计信息"""
+        if not self.enable_caching:
+            return {"caching_enabled": False}
+
+        stats = {
+            "caching_enabled": True,
+            "reasoning_cache": self.reasoning_cache.stats(),
+            "complexity_cache": self.complexity_cache.stats()
+        }
+        return stats
+
+    def clear_cache(self, cache_type: str = "all"):
+        """清空缓存"""
+        if not self.enable_caching:
+            logger.warning("缓存未启用，无法清空")
+            return
+
+        if cache_type == "all" or cache_type == "reasoning":
+            self.reasoning_cache.clear()
+            logger.info("推理结果缓存已清空")
+
+        if cache_type == "all" or cache_type == "complexity":
+            self.complexity_cache.clear()
+            logger.info("复杂度评估缓存已清空")
+
+    def invalidate_cache_by_pattern(self, pattern: str):
+        """按模式失效缓存"""
+        if not self.enable_caching:
+            logger.warning("缓存未启用，无法失效")
+            return
+
+        # 失效推理缓存
+        self.cache_manager.invalidate_pattern(pattern, "reasoning_results")
+        # 失效复杂度缓存
+        self.cache_manager.invalidate_pattern(pattern, "complexity_assessment")
+        logger.info(f"缓存已按模式失效: {pattern}")
+
+    def optimize_cache(self):
+        """优化缓存性能"""
+        if not self.enable_caching:
+            logger.warning("缓存未启用，无法优化")
+            return
+
+        # 清理过期条目
+        self.cache_manager.cleanup_expired()
+
+        # 打印统计信息
+        stats = self.get_cache_stats()
+        logger.info(f"缓存优化完成: 推理缓存命中率 {stats['reasoning_cache'].get('hit_rate', 0)*100:.1f}%, "
+                   f"复杂度缓存命中率 {stats['complexity_cache'].get('hit_rate', 0)*100:.1f}%")
 

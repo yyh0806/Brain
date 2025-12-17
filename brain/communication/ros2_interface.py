@@ -22,6 +22,14 @@ from enum import Enum
 import numpy as np
 from loguru import logger
 
+# 导入命令队列系统
+try:
+    from .command_queue import CommandQueue, CommandPriority, CommandType
+    COMMAND_QUEUE_AVAILABLE = True
+except ImportError:
+    logger.warning("命令队列系统不可用，将使用直接发布模式")
+    COMMAND_QUEUE_AVAILABLE = False
+
 # 尝试导入ROS2，如果不可用则使用模拟模式
 try:
     import rclpy
@@ -184,37 +192,41 @@ class ROS2Interface:
     
     def __init__(self, config: Optional[ROS2Config] = None):
         self.config = config or ROS2Config()
-        
+
         # 确定运行模式
         if ROS2_AVAILABLE and self.config.mode == ROS2Mode.REAL:
             self.mode = ROS2Mode.REAL
         else:
             self.mode = ROS2Mode.SIMULATION
-        
+
         # ROS2节点（仅在真实模式下使用）
         self._node: Optional[Any] = None
         self._executor: Optional[Any] = None
         self._spin_thread: Optional[threading.Thread] = None
         self._executor_thread: Optional[threading.Thread] = None
-        
+
         # 发布者和订阅者
         self._publishers: Dict[str, Any] = {}
         self._subscribers: Dict[str, Any] = {}
-        
+
         # 最新传感器数据缓存
         self._sensor_data = SensorData()
         self._data_lock = threading.Lock()
-        
+
         # 回调函数
         self._sensor_callbacks: Dict[str, List[Callable]] = {}
-        
+
         # 运行状态
         self._running = False
-        
+
         # 调试：回调计数
         self._callback_counts: Dict[str, int] = {}
-        
-        logger.info(f"ROS2Interface 初始化完成 (模式: {self.mode.value})")
+
+        # 命令队列系统
+        self.command_queue: Optional[CommandQueue] = None
+        self.use_command_queue = COMMAND_QUEUE_AVAILABLE and self.config.get("use_command_queue", True)
+
+        logger.info(f"ROS2Interface 初始化完成 (模式: {self.mode.value}, 命令队列: {self.use_command_queue})")
     
     async def initialize(self):
         """初始化ROS2接口"""
@@ -224,7 +236,18 @@ class ROS2Interface:
             asyncio.create_task(self._spin_ros2_async())
         else:
             await self._init_simulation()
-        
+
+        # 初始化命令队列
+        if self.use_command_queue:
+            self.command_queue = CommandQueue(
+                max_size=self.config.get("command_queue_size", 1000),
+                batch_timeout=self.config.get("command_batch_timeout", 0.05),
+                max_rate=self.config.get("command_max_rate", 30.0),
+                enable_batching=self.config.get("enable_command_batching", True)
+            )
+            await self.command_queue.start()
+            logger.info("命令队列已启动")
+
         self._running = True
         logger.info("ROS2接口初始化完成")
     
@@ -591,13 +614,32 @@ class ROS2Interface:
     
     # === 公共API ===
     
-    async def publish_twist(self, cmd: TwistCommand):
+    async def publish_twist(self, cmd: TwistCommand, priority: CommandPriority = CommandPriority.NORMAL, use_queue: Optional[bool] = None):
         """
-        发布速度控制命令
-        
+        发布速度控制命令（支持命令队列）
+
         Args:
             cmd: TwistCommand对象
+            priority: 命令优先级
+            use_queue: 是否使用命令队列，None表示使用默认配置
         """
+        should_use_queue = use_queue if use_queue is not None else self.use_command_queue
+
+        if should_use_queue and self.command_queue:
+            # 使用命令队列
+            command_id = await self.command_queue.enqueue_command(
+                command=cmd,
+                command_type=CommandType.MOVE,
+                priority=priority
+            )
+            logger.debug(f"命令入队: {command_id} ({priority.name})")
+            return command_id
+        else:
+            # 直接发布
+            return await self._publish_twist_direct(cmd)
+
+    async def _publish_twist_direct(self, cmd: TwistCommand):
+        """直接发布速度控制命令"""
         if self.mode == ROS2Mode.REAL:
             twist_msg = Twist()
             # 显式转换为float，避免np.float/整型触发ROS类型校验错误
@@ -607,13 +649,30 @@ class ROS2Interface:
             twist_msg.angular.x = float(cmd.angular_x)
             twist_msg.angular.y = float(cmd.angular_y)
             twist_msg.angular.z = float(cmd.angular_z)
-            
+
             self._publishers["cmd_vel"].publish(twist_msg)
-            logger.debug(f"发布Twist命令: linear_x={cmd.linear_x}, angular_z={cmd.angular_z}")
+            logger.debug(f"直接发布Twist命令: linear_x={cmd.linear_x}, angular_z={cmd.angular_z}")
         else:
             # 模拟模式：更新模拟的里程计
             await self._simulate_movement(cmd)
             logger.debug(f"模拟Twist命令: linear_x={cmd.linear_x}, angular_z={cmd.angular_z}")
+
+    async def emergency_stop(self):
+        """紧急停止（最高优先级）"""
+        if self.command_queue:
+            return await self.command_queue.enqueue_emergency_stop()
+        else:
+            return await self._publish_twist_direct(TwistCommand.stop())
+
+    async def publish_movement(self, linear_x: float, angular_z: float = 0.0, priority: CommandPriority = CommandPriority.NORMAL):
+        """发布运动命令（便捷方法）"""
+        cmd = TwistCommand(linear_x=linear_x, angular_z=angular_z)
+        return await self.publish_twist(cmd, priority)
+
+    async def publish_turn(self, angular_z: float, linear_x: float = 0.0, priority: CommandPriority = CommandPriority.HIGH):
+        """发布转向命令（便捷方法）"""
+        cmd = TwistCommand(linear_x=linear_x, angular_z=angular_z)
+        return await self.publish_twist(cmd, priority)
     
     async def _simulate_movement(self, cmd: TwistCommand, dt: float = 0.1):
         """模拟运动更新"""
@@ -751,18 +810,35 @@ class ROS2Interface:
     async def shutdown(self):
         """关闭ROS2接口"""
         self._running = False
-        
+
+        # 停止命令队列
+        if self.command_queue:
+            await self.command_queue.stop()
+            logger.info("命令队列已停止")
+
         if self.mode == ROS2Mode.REAL:
             if self._spin_thread:
                 self._spin_thread.join(timeout=2.0)
-            
+
             if self._node:
                 self._node.destroy_node()
-            
+
             if rclpy.ok():
                 rclpy.shutdown()
-        
+
         logger.info("ROS2接口已关闭")
+
+    def get_command_queue_stats(self) -> Optional[Dict[str, Any]]:
+        """获取命令队列统计信息"""
+        if self.command_queue:
+            return self.command_queue.get_stats()
+        return None
+
+    def get_command_queue_status(self) -> Optional[Dict[str, Any]]:
+        """获取命令队列状态"""
+        if self.command_queue:
+            return self.command_queue.get_queue_status()
+        return None
     
     def is_running(self) -> bool:
         """检查接口是否运行中"""

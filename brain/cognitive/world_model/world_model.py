@@ -18,6 +18,14 @@ import math
 import numpy as np
 from loguru import logger
 
+# 导入资源管理器
+try:
+    from brain.utils.resource_manager import get_resource_manager, ResourceType, track_resource
+    RESOURCE_MANAGER_AVAILABLE = True
+except ImportError:
+    logger.warning("资源管理器不可用，将运行在无资源管理模式")
+    RESOURCE_MANAGER_AVAILABLE = False
+
 # 导入 VLM 相关类型
 try:
     from brain.perception.vlm_perception import (
@@ -322,14 +330,21 @@ class WorldModel:
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        
+
+        # 资源管理
+        self.resource_manager = None
+        self.tracker = None
+        if RESOURCE_MANAGER_AVAILABLE:
+            self.resource_manager = get_resource_manager()
+            self.tracker = self.resource_manager.create_tracker("world_model")
+
         # 机器人状态
         self.robot_position: Dict[str, float] = {"x": 0, "y": 0, "z": 0, "lat": 0, "lon": 0, "alt": 0}
         self.robot_velocity: Dict[str, float] = {"vx": 0, "vy": 0, "vz": 0}
         self.robot_heading: float = 0.0
         self.battery_level: float = 100.0
         self.signal_strength: float = 100.0
-        
+
         # 环境状态
         self.tracked_objects: Dict[str, TrackedObject] = {}
         self.weather: Dict[str, Any] = {
@@ -339,132 +354,148 @@ class WorldModel:
             "visibility": "good",
             "temperature": 25.0
         }
-        
-        # 空间信息
+
+        # 空间信息（优化：限制地图内存使用）
         # 注意：不再维护 occupied_cells，直接使用 OccupancyMapper 生成的地图
         self.current_map: Optional[np.ndarray] = None  # 占据栅格地图（来自 OccupancyMapper）
         self.map_resolution: float = 0.1  # 地图分辨率
         self.map_origin: Tuple[float, float] = (0.0, 0.0)  # 地图原点
-        
+        self.max_map_size = self.config.get("max_map_size", 1000*1000)  # 最大地图尺寸
+
         self.known_paths: List[Dict[str, Any]] = []
         self.points_of_interest: Dict[str, Dict[str, Any]] = {}
         self.geofence: Optional[Dict[str, Any]] = None
-        
-        # 语义物体追踪（从 SemanticWorldModel 迁移）
+
+        # 语义物体追踪（从 SemanticWorldModel 迁移）- 优化内存使用
         self.semantic_objects: Dict[str, SemanticObject] = {}
         self._object_counter = 0
-        
-        # 探索边界管理（从 SemanticWorldModel 迁移）
+        self.max_semantic_objects = self.config.get("max_semantic_objects", 500)
+
+        # 探索边界管理（从 SemanticWorldModel 迁移）- 优化内存使用
         self.exploration_frontiers: List[ExplorationFrontier] = []
         self._frontier_counter = 0
         self.explored_positions: Set[Tuple[int, int]] = set()  # 栅格化坐标
         self.grid_resolution = self.config.get("grid_resolution", 0.5)  # 米
-        
+        self.max_frontiers = self.config.get("max_frontiers", 100)
+
         # 目标管理（从 SemanticWorldModel 迁移）
         self.current_target: Optional[SemanticObject] = None
         self.target_description: str = ""
-        
+
         # 物体匹配参数（从 SemanticWorldModel 迁移）
         self._position_threshold = self.config.get("position_threshold", 2.0)  # 米
         self._label_similarity_threshold = 0.5
-        
-        # 场景历史（从 SemanticWorldModel 迁移）
+
+        # 场景历史（从 SemanticWorldModel 迁移）- 优化内存使用
         self._scene_history: List[Any] = []  # SceneDescription
-        self._max_history = 50
-        
-        # 位姿轨迹记录
+        self._max_history = self.config.get("max_history", 50)
+
+        # 位姿轨迹记录 - 优化内存使用
         self.pose_history: List[Dict[str, Any]] = []
         self.max_pose_history = self.config.get("max_pose_history", 1000)
         self.trajectory_start_time: Optional[datetime] = None
-        
-        # 变化检测
+
+        # 变化检测 - 优化内存使用
         self.previous_state: Optional[Dict[str, Any]] = None
         self.pending_changes: List[EnvironmentChange] = []
         self.change_history: List[EnvironmentChange] = []
-        self.max_history = 100
-        
+        self.max_history = self.config.get("max_change_history", 100)
+
         # 上一次更新时间
         self.last_update: datetime = datetime.now()
-        
-        logger.info("WorldModel 初始化完成")
+
+        # 内存管理配置
+        self.enable_memory_management = self.config.get("enable_memory_management", True)
+        self.cleanup_threshold = self.config.get("cleanup_threshold", 0.8)  # 80%内存使用率触发清理
+
+        logger.info("WorldModel 初始化完成 (支持资源管理)" if RESOURCE_MANAGER_AVAILABLE else "WorldModel 初始化完成")
     
     def update_from_perception(
-        self, 
+        self,
         perception_data: Union['PerceptionData', Dict[str, Any]]
     ) -> List[EnvironmentChange]:
         """
-        从感知数据更新世界模型
-        
+        从感知数据更新世界模型（优化：增量更新）
+
         Args:
             perception_data: PerceptionData 对象或传感器数据字典（向后兼容）
-            
+
         Returns:
             List[EnvironmentChange]: 检测到的显著变化列表
         """
-        # 保存当前状态用于变化检测
+        # 快速检查是否有必要进行更新
         self._save_previous_state()
-        
+
+        # 优化：如果没有显著变化且距离上次更新时间很短，跳过处理
+        if not self.has_significant_change() and (datetime.now() - self.last_update).total_seconds() < 0.1:
+            logger.debug("WorldModel跳过更新：无显著变化")
+            return []
+
         changes = []
-        
+
         # 处理 PerceptionData 或 Dict 格式（向后兼容）
         if isinstance(perception_data, dict):
             # 旧格式：Dict[str, Any]
             return self._update_from_dict(perception_data)
-        
+
         # 新格式：PerceptionData
         if not PERCEPTION_DATA_AVAILABLE:
             logger.error("PerceptionData not available, falling back to dict format")
             return []
-        
-        # 更新机器人位姿（从 PerceptionData）
+
+        # 增量更新：只更新变化的部分
         if perception_data.pose:
-            self.robot_position.update({
-                "x": perception_data.pose.x,
-                "y": perception_data.pose.y,
-                "z": perception_data.pose.z
-            })
-            self.robot_heading = perception_data.pose.yaw
-            
-            # 记录位姿轨迹
-            self._record_pose({
-                "x": perception_data.pose.x,
-                "y": perception_data.pose.y,
-                "z": perception_data.pose.z,
-                "yaw": perception_data.pose.yaw,
-                "velocity": perception_data.velocity.to_dict() if perception_data.velocity else {}
-            })
-        
-        # 直接使用 OccupancyMapper 生成的地图
+            # 检查位姿是否有显著变化
+            new_x, new_y, new_z = perception_data.pose.x, perception_data.pose.y, perception_data.pose.z
+            old_x, old_y, old_z = self.robot_position.get("x", 0), self.robot_position.get("y", 0), self.robot_position.get("z", 0)
+            pose_change = math.sqrt((new_x - old_x)**2 + (new_y - old_y)**2 + (new_z - old_z)**2)
+
+            if pose_change > 0.5:  # 位姿变化超过0.5米才更新
+                self.robot_position.update({"x": new_x, "y": new_y, "z": new_z})
+                self.robot_heading = perception_data.pose.yaw
+
+                # 记录位姿轨迹（限制频率）
+                if len(self.pose_history) == 0 or pose_change > 2.0:
+                    self._record_pose({
+                        "x": new_x, "y": new_y, "z": new_z,
+                        "yaw": perception_data.pose.yaw,
+                        "velocity": perception_data.velocity.to_dict() if perception_data.velocity else {}
+                    })
+
+        # 地图更新（检查是否有变化）
         if perception_data.occupancy_grid is not None:
-            self.current_map = perception_data.occupancy_grid
-            self.map_resolution = perception_data.grid_resolution
-            self.map_origin = perception_data.grid_origin
-            logger.debug(f"地图更新: 分辨率={self.map_resolution}m, 大小={perception_data.occupancy_grid.shape}")
-        
-        # 从障碍物列表更新追踪物体
+            if self.current_map is None or not np.array_equal(self.current_map, perception_data.occupancy_grid):
+                self.current_map = perception_data.occupancy_grid
+                self.map_resolution = perception_data.grid_resolution
+                self.map_origin = perception_data.grid_origin
+                logger.debug(f"地图更新: 分辨率={self.map_resolution}m, 大小={perception_data.occupancy_grid.shape}")
+
+        # 从障碍物列表更新追踪物体（增量更新）
         if perception_data.obstacles:
             object_changes = self._update_tracked_objects_from_obstacles(perception_data.obstacles)
             changes.extend(object_changes)
-        
-        # 检测路径阻塞（使用地图）
-        path_changes = self._check_path_blocking()
-        changes.extend(path_changes)
-        
-        # 记录变化
-        for change in changes:
+
+        # 检测路径阻塞（仅在障碍物变化后）
+        if object_changes:
+            path_changes = self._check_path_blocking()
+            changes.extend(path_changes)
+
+        # 记录变化（限制变化数量）
+        significant_changes = changes[:10]  # 限制每帧最多处理10个变化
+        for change in significant_changes:
             self.pending_changes.append(change)
             self.change_history.append(change)
-        
+
         # 限制历史长度
         if len(self.change_history) > self.max_history:
             self.change_history = self.change_history[-self.max_history:]
-        
+
         self.last_update = datetime.now()
-        
+
         if changes:
-            logger.info(f"WorldModel更新: 检测到 {len(changes)} 个变化")
-        
-        return changes
+            logger.info(f"WorldModel增量更新: 检测到 {len(changes)} 个变化")
+
+        return significant_changes
     
     def _update_from_dict(self, sensor_data: Dict[str, Any]) -> List[EnvironmentChange]:
         """向后兼容：从字典格式更新（旧接口）"""
@@ -584,13 +615,63 @@ class WorldModel:
         return changes
     
     def _save_previous_state(self):
-        """保存当前状态用于变化检测"""
+        """保存当前状态用于变化检测（优化：仅保存关键状态）"""
+        # 优化：只保存关键状态哈希值，减少内存开销
         self.previous_state = {
-            "robot_position": deepcopy(self.robot_position),
-            "tracked_objects": {k: deepcopy(v) for k, v in self.tracked_objects.items()},
-            "weather": deepcopy(self.weather),
-            "battery_level": self.battery_level
+            "robot_position_hash": self._hash_position(self.robot_position),
+            "tracked_objects_hash": self._hash_tracked_objects(),
+            "weather_hash": self._hash_weather(),
+            "battery_level": self.battery_level,
+            "last_check_time": datetime.now()
         }
+
+    def _hash_position(self, position: Dict[str, float]) -> int:
+        """计算位置哈希值"""
+        # 使用网格化位置减少微小变化的检测
+        grid_size = 1.0  # 1米网格
+        grid_x = int(position.get("x", 0) / grid_size)
+        grid_y = int(position.get("y", 0) / grid_size)
+        grid_z = int(position.get("z", 0) / grid_size)
+        return hash((grid_x, grid_y, grid_z))
+
+    def _hash_tracked_objects(self) -> int:
+        """计算追踪对象的哈希值"""
+        # 只计算关键对象的状态哈希
+        key_objects = []
+        for obj_id, obj in list(self.tracked_objects.items())[:50]:  # 限制对象数量
+            key_objects.append((
+                obj_id,
+                self._hash_position(obj.position),
+                obj.is_obstacle,
+                obj.is_target
+            ))
+        return hash(tuple(key_objects))
+
+    def _hash_weather(self) -> int:
+        """计算天气状态哈希值"""
+        key_weather = (
+            self.weather.get("condition", "clear"),
+            int(self.weather.get("wind_speed", 0)),
+            int(self.weather.get("visibility", "good") != "good")
+        )
+        return hash(key_weather)
+
+    def has_significant_change(self) -> bool:
+        """快速检查是否有显著变化"""
+        if not self.previous_state:
+            return True
+
+        current_pos_hash = self._hash_position(self.robot_position)
+        current_objects_hash = self._hash_tracked_objects()
+        current_weather_hash = self._hash_weather()
+
+        # 检查关键状态变化
+        position_changed = current_pos_hash != self.previous_state.get("robot_position_hash")
+        objects_changed = current_objects_hash != self.previous_state.get("tracked_objects_hash")
+        weather_changed = current_weather_hash != self.previous_state.get("weather_hash")
+        battery_critical = self.battery_level < 20 and self.previous_state.get("battery_level", 100) >= 20
+
+        return position_changed or objects_changed or weather_changed or battery_critical
     
     def _update_tracked_objects(self, detections: List[Dict[str, Any]]) -> List[EnvironmentChange]:
         """更新跟踪的物体"""
@@ -1498,4 +1579,142 @@ class WorldModel:
             self.current_target.is_target = False
         self.current_target = None
         self.target_description = ""
+
+    def _manage_memory_usage(self):
+        """管理内存使用"""
+        if not self.enable_memory_management:
+            return
+
+        # 检查是否需要清理
+        memory_usage = self._estimate_memory_usage()
+        if memory_usage > self.cleanup_threshold:
+            logger.warning(f"内存使用率 {memory_usage*100:.1f}% 超过阈值，执行清理")
+            self._perform_memory_cleanup()
+
+    def _estimate_memory_usage(self) -> float:
+        """估算内存使用率"""
+        try:
+            import psutil
+            process = psutil.Process()
+            return process.memory_percent() / 100.0
+        except ImportError:
+            # 如果没有psutil，使用简单的对象计数估算
+            object_count = (
+                len(self.tracked_objects) +
+                len(self.semantic_objects) +
+                len(self.exploration_frontiers) +
+                len(self.pose_history) +
+                len(self.change_history)
+            )
+            return min(object_count / 10000.0, 1.0)  # 简化估算
+
+    def _perform_memory_cleanup(self):
+        """执行内存清理"""
+        cleaned_count = 0
+
+        # 清理过期或过多的语义物体
+        if len(self.semantic_objects) > self.max_semantic_objects:
+            # 按最后访问时间排序，移除最旧的
+            sorted_objects = sorted(
+                self.semantic_objects.items(),
+                key=lambda x: x[1].last_seen
+            )
+            to_remove = sorted_objects[:len(self.semantic_objects) - self.max_semantic_objects]
+            for obj_id, obj in to_remove:
+                if obj.state != ObjectState.CONFIRMED:
+                    del self.semantic_objects[obj_id]
+                    cleaned_count += 1
+
+        # 清理过多的探索边界
+        if len(self.exploration_frontiers) > self.max_frontiers:
+            self.exploration_frontiers = self.exploration_frontiers[-self.max_frontiers:]
+            cleaned_count += len(self.exploration_frontiers) - self.max_frontiers
+
+        # 清理位姿历史
+        if len(self.pose_history) > self.max_pose_history:
+            old_count = len(self.pose_history)
+            self.pose_history = self.pose_history[-self.max_pose_history:]
+            cleaned_count += old_count - len(self.pose_history)
+
+        # 清理变化历史
+        if len(self.change_history) > self.max_history:
+            old_count = len(self.change_history)
+            self.change_history = self.change_history[-self.max_history:]
+            cleaned_count += old_count - len(self.change_history)
+
+        # 清理场景历史
+        if len(self._scene_history) > self._max_history:
+            old_count = len(self._scene_history)
+            self._scene_history = self._scene_history[-self._max_history:]
+            cleaned_count += old_count - len(self._scene_history)
+
+        # 清理已探索的位置（保留最近的部分）
+        if len(self.explored_positions) > 10000:
+            self.explored_positions = set(list(self.explored_positions)[-5000:])
+            cleaned_count += 1
+
+        # 清理地图（如果过大）
+        if (self.current_map is not None and
+            self.current_map.size > self.max_map_size):
+            # 降采样地图
+            self.current_map = self._downsample_map(self.current_map)
+            cleaned_count += 1
+
+        logger.info(f"内存清理完成: 清理了 {cleaned_count} 个项目")
+        return cleaned_count
+
+    def _downsample_map(self, map_array: np.ndarray, factor: int = 2) -> np.ndarray:
+        """降采样地图以减少内存使用"""
+        try:
+            # 使用最大值池化降采样
+            h, w = map_array.shape
+            new_h, new_w = h // factor, w // factor
+            downsampled = np.zeros((new_h, new_w), dtype=map_array.dtype)
+
+            for i in range(new_h):
+                for j in range(new_w):
+                    patch = map_array[i*factor:(i+1)*factor, j*factor:(j+1)*factor]
+                    downsampled[i, j] = np.max(patch)
+
+            return downsampled
+        except Exception as e:
+            logger.error(f"地图降采样失败: {e}")
+            return map_array
+
+    def get_memory_stats(self) -> Dict[str, Any]:
+        """获取内存使用统计"""
+        stats = {
+            "tracked_objects": len(self.tracked_objects),
+            "semantic_objects": len(self.semantic_objects),
+            "exploration_frontiers": len(self.exploration_frontiers),
+            "pose_history": len(self.pose_history),
+            "change_history": len(self.change_history),
+            "scene_history": len(self._scene_history),
+            "explored_positions": len(self.explored_positions),
+        }
+
+        # 估算各部分的内存使用
+        if self.current_map is not None:
+            stats["map_memory_mb"] = self.current_map.nbytes / (1024 * 1024)
+            stats["map_shape"] = self.current_map.shape
+
+        # 获取资源管理器统计
+        if self.tracker:
+            tracker_stats = self.tracker.get_stats()
+            stats["resource_tracker"] = tracker_stats
+
+        return stats
+
+    def force_cleanup(self):
+        """强制执行内存清理"""
+        logger.info("强制执行世界模型内存清理")
+        return self._perform_memory_cleanup()
+
+    def __del__(self):
+        """析构函数，确保资源清理"""
+        try:
+            if self.tracker:
+                self.tracker.cleanup_all()
+        except:
+            pass
 

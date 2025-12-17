@@ -1,0 +1,265 @@
+name: Parallel Development CI/CD
+
+on:
+  push:
+    branches: [ main, master, perception-dev, cognitive-dev, planning-dev, execution-dev, communication-dev, models-dev ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      perception: ${{ steps.changes.outputs.perception }}
+      cognitive: ${{ steps.changes.outputs.cognitive }}
+      planning: ${{ steps.changes.outputs.planning }}
+      execution: ${{ steps.changes.outputs.execution }}
+      communication: ${{ steps.changes.outputs.communication }}
+      models: ${{ steps.changes.outputs.models }}
+      core: ${{ steps.changes.outputs.core }}
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 2
+    - uses: dorny/paths-filter@v2
+      id: changes
+      with:
+        filters: |
+          perception:
+            - 'brain/perception/**'
+          cognitive:
+            - 'brain/cognitive/**'
+          planning:
+            - 'brain/planning/**'
+          execution:
+            - 'brain/execution/**'
+          communication:
+            - 'brain/communication/**'
+          models:
+            - 'brain/models/**'
+          core:
+            - 'brain/core/**'
+            - 'brain/state/**'
+            - 'brain/recovery/**'
+            - 'brain/utils/**'
+            - 'brain/visualization/**'
+            - 'brain/platforms/**'
+
+  test-perception:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.perception == 'true'
+    runs-on: ubuntu-latest
+    container: ros:humble
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y python3-pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    - name: Run perception layer tests
+      run: |
+        cd brain
+        python -m pytest perception/ -v --cov=perception --cov-report=xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: perception
+
+  test-cognitive:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.cognitive == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    - name: Run cognitive layer tests
+      run: |
+        cd brain
+        python -m pytest cognitive/ -v --cov=cognitive --cov-report=xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: cognitive
+
+  test-planning:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.planning == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio numpy scipy
+    - name: Run planning layer tests
+      run: |
+        cd brain
+        python -m pytest planning/ -v --cov=planning --cov-report=xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: planning
+
+  test-execution:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.execution == 'true'
+    runs-on: ubuntu-latest
+    container: ros:humble
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y python3-pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    - name: Run execution layer tests
+      run: |
+        cd brain
+        python -m pytest execution/ -v --cov=execution --cov-report=xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: execution
+
+  test-communication:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.communication == 'true'
+    runs-on: ubuntu-latest
+    container: ros:humble
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y python3-pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    - name: Run communication layer tests
+      run: |
+        cd brain
+        python -m pytest communication/ -v --cov=communication --cov-report=xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: communication
+
+  test-models:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.models == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    - name: Run models layer tests
+      run: |
+        cd brain
+        python -m pytest models/ -v --cov=models --cov-report=xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: models
+
+  test-core:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    - name: Run core components tests
+      run: |
+        cd brain
+        python -m pytest core/ state/ recovery/ utils/ visualization/ platforms/ -v --cov=core --cov-report=xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: core
+
+  integration-tests:
+    needs: [detect-changes, test-perception, test-cognitive, test-planning, test-execution, test-communication, test-models]
+    if: always() && (needs.test-perception.result == 'success' || needs.test-perception.result == 'skipped') && (needs.test-cognitive.result == 'success' || needs.test-cognitive.result == 'skipped') && (needs.test-planning.result == 'success' || needs.test-planning.result == 'skipped') && (needs.test-execution.result == 'success' || needs.test-execution.result == 'skipped') && (needs.test-communication.result == 'success' || needs.test-communication.result == 'skipped') && (needs.test-models.result == 'success' || needs.test-models.result == 'skipped')
+    runs-on: ubuntu-latest
+    container: ros:humble
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y python3-pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-asyncio
+    - name: Run integration tests
+      run: |
+        cd brain
+        python -m pytest tests/integration/ -v --cov=integration --cov-report=xml || true
+
+  code-quality:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.perception == 'true' || needs.detect-changes.outputs.cognitive == 'true' || needs.detect-changes.outputs.planning == 'true' || needs.detect-changes.outputs.execution == 'true' || needs.detect-changes.outputs.communication == 'true' || needs.detect-changes.outputs.models == 'true' || needs.detect-changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        pip install flake8 black isort mypy
+    - name: Run code quality checks
+      run: |
+        flake8 brain/ --max-line-length=100 --ignore=E203,W503
+        black --check brain/
+        isort --check-only brain/
+        mypy brain/ --ignore-missing-imports || true
