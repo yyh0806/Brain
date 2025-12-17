@@ -1,323 +1,197 @@
-# Brain - 智能无人系统任务规划核心
+# Data Preprocessing Modules for World Model
 
-Brain是一个基于三层架构（感知层、认知层、规划层）的智能任务规划系统，专为无人系统设计，提供从自然语言理解到任务执行的全流程支持。
+This directory contains comprehensive data preprocessing modules for the World Model fusion architecture. The modules provide robust processing capabilities for point cloud, image, and signal data from multiple sensors.
 
-## 架构概述
+## Branch Information
+- Work Tree: preprocessing-dev
+- Branch: preprocessing-dev
+- Base Branch: master
 
-Brain系统采用分层架构设计，将功能模块按照职责划分为感知层、认知层、规划层、执行层和通信层等，各层职责清晰，依赖关系明确。
+## Module Responsibilities
+Data preprocessing module development:
+- Point cloud preprocessing algorithms
+- Image preprocessing algorithms
+- Signal filtering processing
+- Data quality assessment
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                   Brain 核心控制器                        │
-├─────────────────────────────────────────────────────────────────┤
-│  认知层 (Cognitive)                                  │
-│  ├── 世界模型 (WorldModel)                              │
-│  ├── 对话管理 (DialogueManager)                         │
-│  ├── 推理引擎 (CoTEngine)                              │
-│  └── 感知监控 (PerceptionMonitor)                      │
-├─────────────────────────────────────────────────────────────────┤
-│  规划层 (Planning)                                    │
-│  ├── 任务规划 (TaskPlanner)                              │
-│  ├── 导航规划 (NavigationPlanner)                        │
-│  └── 行为规划 (BehaviorPlanner)                         │
-├─────────────────────────────────────────────────────────────────┤
-│  感知层 (Perception)                                  │
-│  ├── 传感器管理 (SensorManager)                          │
-│  ├── 环境感知 (EnvironmentPerception)                    │
-│  ├── 地图构建 (Mapping)                                 │
-│  └── VLM感知 (VLMPerception)                             │
-├─────────────────────────────────────────────────────────────────┤
-│  执行层 (Execution)                                    │
-│  ├── 执行器 (Executor)                                   │
-│  └── 操作库 (Operations)                                │
-├─────────────────────────────────────────────────────────────────┤
-│  通信层 (Communication)                                 │
-│  ├── 机器人接口 (RobotInterface)                         │
-│  ├── ROS2接口 (ROS2Interface)                            │
-│  └── 控制适配器 (ControlAdapter)                        │
-├─────────────────────────────────────────────────────────────────┤
-│  模型层 (Models)                                       │
-│  ├── LLM接口 (LLMInterface)                              │
-│  ├── 提示模板 (PromptTemplates)                          │
-│  └── 任务解析器 (TaskParser)                              │
-└─────────────────────────────────────────────────────────────────┘
-```
+## Overview
 
-## 目录结构
+The preprocessing pipeline consists of four main modules:
+
+1. **Point Cloud Processing** - 3D LiDAR/radar data processing
+2. **Image Processing** - Visual data enhancement and analysis
+3. **Signal Processing** - IMU, GPS, and multi-sensor fusion
+4. **Quality Assessment** - Data integrity and quality validation
+
+## Architecture
 
 ```
-brain/
-├── __init__.py
-├── cognitive/               # 认知层 - 负责环境理解、世界建模和决策推理
-│   ├── __init__.py
-│   ├── dialogue/              # 对话管理
-│   │   ├── __init__.py
-│   │   └── dialogue_manager.py
-│   ├── monitoring/            # 认知监控
-│   │   ├── __init__.py
-│   │   └── perception_monitor.py
-│   ├── reasoning/             # 推理引擎
-│   │   ├── __init__.py
-│   │   └── cot_engine.py
-│   └── world_model/           # 世界模型管理
-│       ├── __init__.py
-│       └── world_model.py
-├── communication/           # 通信层 - 负责与外部系统通信
-│   ├── __init__.py
-│   ├── control_adapter.py     # 控制适配器
-│   ├── message_types.py       # 消息类型定义
-│   ├── robot_interface.py     # 机器人接口
-│   └── ros2_interface.py     # ROS2接口
-├── core/                   # 核心控制器
-│   ├── __init__.py
-│   ├── brain.py             # 主控制器
-│   └── monitor.py           # 系统监控
-├── execution/               # 执行层 - 负责指令执行和控制
-│   ├── __init__.py
-│   ├── executor.py           # 执行器
-│   └── operations/          # 操作库
-│       ├── __init__.py
-│       ├── base.py
-│       ├── drone.py
-│       ├── ros2_ugv.py
-│       ├── ugv.py
-│       └── usv.py
-├── models/                 # 模型层 - LLM和AI模型接口
-│   ├── __init__.py
-│   ├── cot_prompts.py       # CoT提示模板
-│   ├── llm_interface.py     # LLM接口
-│   ├── ollama_client.py     # Ollama客户端
-│   ├── prompt_templates.py   # 提示模板
-│   └── task_parser.py       # 任务解析器
-├── perception/             # 感知层 - 负责所有传感器数据处理和环境感知
-│   ├── __init__.py
-│   ├── environment.py        # 环境模型感知
-│   ├── mapping/             # 地图构建
-│   │   ├── __init__.py
-│   │   └── occupancy_mapper.py
-│   ├── object_detector.py    # 物体检测
-│   ├── sensors/             # 传感器管理
-│   │   ├── __init__.py
-│   │   ├── ros2_sensor_manager.py
-│   │   ├── sensor_fusion.py
-│   │   └── sensor_manager.py
-│   └── vlm/                # 视觉语言模型感知
-│       ├── __init__.py
-│       └── vlm_perception.py
-├── planning/               # 规划层 - 负责任务规划、路径规划和行为规划
-│   ├── __init__.py
-│   ├── behavior/            # 行为规划
-│   │   └── __init__.py
-│   ├── navigation/          # 导航规划
-│   │   ├── __init__.py
-│   │   ├── exploration_planner.py
-│   │   ├── intersection_navigator.py
-│   │   ├── local_planner.py
-│   │   └── smooth_executor.py
-│   └── task/               # 任务规划
-│       ├── __init__.py
-│       └── task_planner.py
-├── platforms/              # 平台支持
-│   ├── __init__.py
-│   └── robot_capabilities.py
-├── recovery/               # 错误恢复
-│   ├── __init__.py
-│   ├── error_handler.py
-│   ├── replanner.py
-│   └── rollback.py
-├── state/                 # 状态管理
-│   ├── __init__.py
-│   ├── checkpoint.py
-│   ├── mission_state.py
-│   └── world_state.py
-├── utils/                 # 工具类
-│   ├── __init__.py
-│   └── config.py
-└── visualization/          # 可视化
-    ├── __init__.py
-    └── rviz2_visualizer.py
+brain/cognitive/world_model/
+├── pointcloud_processor.py    # 3D point cloud processing
+├── image_processor.py         # 2D image processing
+├── signal_processor.py        # 1D signal processing
+└── quality_assessor.py        # Data quality assessment
 ```
 
-## 各层职责
+## Features
 
-### 感知层 (Perception Layer)
-- 负责所有传感器数据的采集和处理
-- 进行数据融合和初步分析
-- 构建和维护环境地图
-- 提供环境感知的统一接口
+### Point Cloud Processing (`pointcloud_processor.py`)
 
-### 认知层 (Cognitive Layer)
-- 维护和更新世界模型
-- 进行环境理解和语义分析
-- 执行推理和决策过程
-- 管理人机对话和交互
+- **Voxel Grid Downsampling** - Efficient point cloud reduction
+- **Statistical Outlier Removal** - Noise filtering
+- **ICP Registration** - Point cloud alignment
+- **Feature Extraction** - Geometric and local descriptors
+- **GPU Acceleration** - CUDA support when available
+- **Batch Processing** - Handle multiple point clouds efficiently
 
-### 规划层 (Planning Layer)
-- 进行任务分解和规划
-- 生成导航路径和行为序列
-- 处理动态重规划
-- 协调不同规划子模块
+```python
+from brain.cognitive.world_model.pointcloud_processor import PointCloudProcessor
 
-### 执行层 (Execution Layer)
-- 执行规划层生成的操作序列
-- 管理不同平台的操作接口
-- 处理执行过程中的状态反馈
-- 提供统一的执行控制接口
+processor = PointCloudProcessor()
+result = processor.process(point_cloud_data)
+print(f"Processed {result['original_count']} -> {result['final_count']} points")
+print(f"Quality score: {result['quality_score']:.3f}")
+```
 
-### 通信层 (Communication Layer)
-- 管理与外部系统的通信
-- 提供统一的通信接口
-- 处理不同通信协议的适配
-- 管理消息类型和格式转换
+### Image Processing (`image_processor.py`)
 
-### 模型层 (Models Layer)
-- 提供LLM和AI模型的统一接口
-- 管理提示模板和任务解析
-- 处理模型配置和连接
-- 提供模型能力的抽象
+- **Image Enhancement** - Brightness, contrast, saturation, sharpness
+- **YOLO Object Detection** - State-of-the-art object detection
+- **Semantic Segmentation** - DeepLabV3 pixel-level segmentation
+- **Feature Extraction** - SIFT, HOG, color histograms, texture analysis
+- **GPU Acceleration** - PyTorch CUDA support
+- **Batch Processing** - Process multiple images in parallel
 
-## 依赖关系
+```python
+from brain.cognitive.world_model.image_processor import ImageProcessor
 
-- 感知层 → 无底层依赖
-- 认知层 → 依赖感知层提供的环境数据
-- 规划层 → 依赖认知层提供的世界模型和推理结果
-- 执行层 → 依赖规划层生成的计划
-- 核心控制器 → 协调各层之间的交互
+processor = ImageProcessor()
+result = processor.process(image_data)
+print(f"Detected {result['detections']['num_detections']} objects")
+print(f"Image quality: {result['quality_score']:.3f}")
+```
 
-## 开发指南
+### Signal Processing (`signal_processor.py`)
 
-### 环境要求
+- **IMU Filtering** - Complementary filter, Kalman filtering
+- **GPS Correction** - Outlier detection, Kalman smoothing
+- **Sensor Fusion** - Multi-sensor data synchronization and fusion
+- **Motion Integration** - Position and velocity estimation
+- **Calibration** - Automated bias and scale factor estimation
 
-- Python 3.8+
-- 依赖项见 `requirements.txt`
+```python
+from brain.cognitive.world_model.signal_processor import SignalProcessor
 
-### 开发流程
+processor = SignalProcessor()
+imu_result = processor.process_imu_data(accel, gyro, timestamp)
+gps_result = processor.process_gps_data(lat, lon, alt, accuracy, sats, hdop, timestamp)
+fused = processor.process_multi_sensor_data([('imu', imu_result, timestamp), ('gps', gps_result, timestamp)])
+```
 
-1. 克隆主仓库
-2. 创建功能分支
-3. 使用Git Worktree管理不同层的开发
-4. 提交代码并创建PR
-5. 代码审查和合并
+### Quality Assessment (`quality_assessor.py`)
 
-### Git Worktree 开发模式
+- **Data Integrity Checks** - Validate data format and completeness
+- **Quality Scoring** - Multi-dimensional quality metrics
+- **Anomaly Detection** - Statistical and ML-based anomaly detection
+- **Temporal Consistency** - Time-series consistency validation
+- **Recommendations** - Automated quality improvement suggestions
 
-为了支持并行开发不同层级，我们使用Git Worktree模式，每个层级可以有独立的开发分支：
+```python
+from brain.cognitive.world_model.quality_assessor import DataQualityAssessor
+
+assessor = DataQualityAssessor()
+quality = assessor.assess_point_cloud_quality(point_cloud, timestamp)
+print(f"Overall quality: {quality['overall_score']:.3f}")
+print(f"Anomalies detected: {quality['anomaly']['is_anomaly']}")
+```
+
+## Installation
+
+### Dependencies
+
+Install the required dependencies:
 
 ```bash
-# 1. 创建并初始化主仓库
-git clone <repository-url>
-cd Brain
-git checkout main
-
-# 2. 为每个层级创建worktree
-git worktree add ../brain-perception perception
-git worktree add ../brain-cognitive cognitive
-git worktree add ../brain-planning planning
-git worktree add ../brain-execution execution
-git worktree add ../brain-communication communication
-git worktree add ../brain-models models
-
-# 3. 开发者可以根据负责的层级进入对应的worktree
-cd ../brain-perception  # 感知层开发
-cd ../brain-cognitive  # 认知层开发
-cd ../brain-planning   # 规划层开发
-cd ../brain-execution   # 执行层开发
-cd ../brain-communication # 通信层开发
-cd ../brain-models      # 模型层开发
+pip install -r requirements.txt
 ```
 
-### 分支管理策略
+### Optional Dependencies
 
+For GPU acceleration, install CUDA-enabled versions:
 ```bash
-# 主分支
-main                    # 主开发分支，包含所有层级
-
-# 层级分支
-perception-dev          # 感知层开发分支
-cognitive-dev          # 认知层开发分支
-planning-dev           # 规划层开发分支
-execution-dev          # 执行层开发分支
-communication-dev      # 通信层开发分支
-models-dev             # 模型层开发分支
-
-# 功能分支
-feature/xxx-perception  # 感知层功能分支
-feature/xxx-cognitive  # 认知层功能分支
-feature/xxx-planning   # 规划层功能分支
-feature/xxx-execution   # 执行层功能分支
-feature/xxx-communication # 通信层功能分支
-feature/xxx-models      # 模型层功能分支
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 ```
 
-### 开发工作流
+## Development Guidelines
+1. Develop based on the latest code from the main branch
+2. Follow the project's coding standards
+3. Commit code promptly and write tests
+4. Regularly sync updates from the main branch
 
+## Testing Commands
+
+### Unit Tests
 ```bash
-# 1. 开发者从main分支创建功能分支
-git checkout main
-git pull origin main
-git checkout -b feature/new-functionality
+# Run unit tests
+python -m pytest tests/unit/test_preprocessing.py -v
 
-# 2. 在对应的worktree中进行开发
-cd ../brain-<layer>
-# 进行代码修改...
-
-# 3. 提交代码
-git add .
-git commit -m "feat: add new functionality"
-
-# 4. 推送到远程仓库
-git push origin feature/new-functionality
-
-# 5. 创建PR到main分支
-# 在GitHub/GitLab上创建Pull Request
+# Run with coverage
+python -m pytest tests/unit/test_preprocessing.py --cov=brain/cognitive/world_model --cov-report=html
 ```
 
-### 代码合并流程
-
+### Integration Tests
 ```bash
-# 1. 各层级开发完成后，合并到对应的层级开发分支
-git checkout perception-dev
-git merge feature/xxx-perception
-git push origin perception-dev
-
-# 2. 定期将层级开发分支合并到main分支
-git checkout main
-git merge perception-dev
-git merge cognitive-dev
-git merge planning-dev
-git merge execution-dev
-git merge communication-dev
-git merge models-dev
-git push origin main
-```
-
-### 测试策略
-
-```bash
-# 1. 单元测试
-cd ../brain-<layer>
-python -m pytest tests/<layer>/
-
-# 2. 集成测试
-cd ../brain
+# Run integration tests
 python -m pytest tests/integration/
 
-# 3. 系统测试
-python -m pytest tests/system/
+# Generate test coverage report
+python -m pytest --cov=brain tests/
 ```
 
-## 贡献指南
+## Demonstration
 
-1. 遵循各层的职责边界，避免跨层级的直接依赖
-2. 保持接口稳定，如需修改需经过讨论和审查
-3. 添加适当的单元测试和文档
-4. 遵循代码风格指南
-5. 提交前确保所有测试通过
+Run the demo script to see all modules in action:
 
-## 许可证
+```bash
+python examples/preprocessing_demo.py --demo-type all
+```
 
-[请在此处添加许可证信息]
+Available demo types:
+- `all` - Run all demonstrations
+- `pointcloud` - Point cloud processing only
+- `image` - Image processing only
+- `signal` - Signal processing only
+- `quality` - Quality assessment only
+- `performance` - Performance benchmarks
 
-## 联系方式
+## Performance Considerations
 
-[请在此处添加联系信息]
+### GPU Acceleration
+
+- Enable GPU processing for large datasets
+- Automatically detects CUDA availability
+- Falls back to CPU if GPU unavailable
+
+```python
+config = PointCloudConfig(use_gpu=True)  # Enable GPU acceleration
+```
+
+### Memory Optimization
+
+- Process data in batches for large datasets
+- Use appropriate voxel sizes for point clouds
+- Configure image resolution based on requirements
+
+## Commit Standards
+
+Commit message format: `module: brief description`
+
+Examples:
+- `pointcloud: Implement voxel grid downsampling with GPU support`
+- `image: Add YOLO object detection with configurable confidence threshold`
+- `signal: Implement IMU complementary filter with automatic calibration`
+- `quality: Add statistical anomaly detection using Isolation Forest`
+
+---
+Created: 2025-12-17
+Updated: 2025-12-17

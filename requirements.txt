@@ -28,9 +28,21 @@ scipy>=1.11.0
 # 图像处理
 Pillow>=10.0.0
 opencv-python>=4.8.0  # 可选，用于图像处理
+scikit-image>=0.20.0
 
-# VLM/YOLO (可选)
-# ultralytics>=8.0.0  # YOLO目标检测，需要时取消注释
+# VLM/YOLO
+ultralytics>=8.0.0  # YOLO目标检测
+torch>=2.0.0
+torchvision>=0.15.0
+
+# 点云处理
+open3d>=0.17.0
+
+# 机器学习
+scikit-learn>=1.3.0
+
+# 传感器数据处理
+numpy-quaternion>=2022.4.0
 
 # 通信协议
 pyzmq>=25.1.0

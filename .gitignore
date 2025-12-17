@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
 .Python
 build/
@@ -20,11 +20,12 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environment
-venv/
-env/
-ENV/
-.venv
+# 测试
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
 
 # IDE
 .vscode/
@@ -33,37 +34,17 @@ ENV/
 *.swo
 *~
 
-# Logs
-logs/
+# 数据文件
+*.pcd
+*.ply
+*.las
+*.laz
+examples/data/raw/
+examples/data/processed/
+
+# 日志
 *.log
 
-# Data
-data/
-checkpoints/
-*.db
-*.sqlite
-
-# Environment variables
-.env
-.env.local
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Project specific
-*.pkl
-*.pickle
+# 临时文件
 temp/
 tmp/
-
-
