@@ -33,6 +33,7 @@ from brain.cognitive.world_model.sensor_manager import (
     MultiSensorManager,
     SensorSyncStatus,
     DataQualityAssessment,
+    SynchronizedDataPacket,
 )
 
 from brain.cognitive.world_model.data_converter import (

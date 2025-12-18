@@ -1,0 +1,85 @@
+# Isaac Sim Fallback Docker配置
+# 使用PyBullet作为仿真环境的轻量级版本
+FROM python:3.9-slim
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONPATH="${PYTHONPATH}:/workspace/brain"
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/lib"
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    vim \
+    htop \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libxi6 \
+    libxrandr2 \
+    libxcursor1 \
+    libxinerama1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 升级pip
+RUN python3 -m pip install --upgrade pip
+
+# 复制requirements文件
+COPY requirements.txt /tmp/
+
+# 安装Python依赖
+RUN pip3 install -r /tmp/requirements.txt
+
+# 安装PyBullet和其他仿真依赖
+RUN pip3 install \
+    pybullet \
+    pygame \
+    opencv-python \
+    numpy \
+    matplotlib \
+    plotly \
+    jupyterlab \
+    streamlit \
+    ROS2-Humble \
+    && rm -rf /tmp/requirements.txt
+
+# 创建工作目录
+WORKDIR /workspace
+
+# 复制Brain项目代码
+COPY . /workspace/brain/
+
+# 设置Brain项目的Python路径
+ENV PYTHONPATH="/workspace/brain:${PYTHONPATH}"
+
+# 创建数据和日志目录
+RUN mkdir -p /workspace/data \
+    && mkdir -p /workspace/logs \
+    && mkdir -p /workspace/config \
+    && mkdir -p /workspace/outputs
+
+# 设置权限
+RUN chmod +x /workspace/brain/*.py
+
+# 创建启动脚本
+RUN echo '#!/bin/bash\n\
+cd /workspace/brain\n\
+export PYTHONPATH="/workspace/brain:${PYTHONPATH}"\n\
+exec "$@"' > /entrypoint.sh \
+    && chmod +x /entrypoint.sh
+
+# 暴露端口
+EXPOSE 8888 8501 8080
+
+# 设置入口点
+ENTRYPOINT ["/entrypoint.sh"]
+
+# 默认命令
+CMD ["python3", "run_complete_system_demo.py", "--mode", "demo"]

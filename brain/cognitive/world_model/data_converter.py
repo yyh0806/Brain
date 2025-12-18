@@ -31,8 +31,9 @@ from .sensor_input_types import (
     GPSData,
     WeatherData,
     CameraIntrinsics,
-    SynchronizedDataPacket,
 )
+
+from .sensor_manager import SynchronizedDataPacket
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -552,8 +553,6 @@ class StandardFormatConverter(DataConverter):
         """Convert data to JSON format."""
         if isinstance(data, SensorDataPacket):
             return self._sensor_packet_to_json(data, options)
-        elif isinstance(data, SynchronizedDataPacket):
-            return self._sync_packet_to_json(data, options)
         elif isinstance(data, (PointCloudData, ImageData, IMUData, GPSData, WeatherData)):
             return self._sensor_data_to_json(data, options)
         else:
@@ -586,27 +585,6 @@ class StandardFormatConverter(DataConverter):
         # Add calibration parameters if requested
         if options.include_metadata:
             json_data["calibration_params"] = packet.calibration_params
-
-        return json.dumps(json_data, indent=2)
-
-    def _sync_packet_to_json(self, packet: SynchronizedDataPacket, options: ConversionOptions) -> str:
-        """Convert synchronized data packet to JSON."""
-        json_data = {
-            "timestamp": packet.timestamp,
-            "group_id": packet.group_id,
-            "sync_quality": packet.sync_quality,
-            "sync_method": packet.sync_method.value,
-            "max_timestamp_delta": packet.max_timestamp_delta,
-            "avg_timestamp_delta": packet.avg_timestamp_delta,
-            "sensor_count": len(packet.sensor_packets),
-        }
-
-        # Add individual sensor packets
-        json_data["sensor_packets"] = {}
-        for sensor_id, sensor_packet in packet.sensor_packets.items():
-            json_data["sensor_packets"][sensor_id] = json.loads(
-                self._sensor_packet_to_json(sensor_packet, options)
-            )
 
         return json.dumps(json_data, indent=2)
 

@@ -1,0 +1,58 @@
+# Brain系统默认配置值
+# 这些值会被其他配置文件覆盖
+
+# LLM默认配置
+llm:
+  provider: "ollama"
+  model: "deepseek-r1:latest"
+  api_base: "http://localhost:11434"
+  max_tokens: 4096
+  temperature: 0.1
+  timeout: 120
+  retry_count: 3
+  retry_delay: 1.0
+
+# 任务规划默认配置
+planning:
+  max_retries: 3
+  timeout: 300  # seconds
+  checkpoint_interval: 5
+  enable_parallel: true
+  max_parallel_operations: 3
+
+# 对话系统默认配置
+dialogue:
+  enabled: true
+  max_history: 50
+  confirmation_required: true
+
+# 性能监控默认配置
+monitoring:
+  enabled: true
+  metrics_interval: 1.0  # seconds
+  health_check_interval: 5.0  # seconds
+  alert_thresholds:
+    cpu_usage: 80  # percent
+    memory_usage: 80  # percent
+    disk_usage: 90  # percent
+
+# 安全约束默认值
+safety:
+  geofence:
+    enabled: true
+    default_radius: 500.0  # meters
+  no_fly_zones: []
+  emergency_procedures:
+    - condition: "battery_critical"
+      action: "return_to_home"
+    - condition: "communication_lost"
+      action: "hover_and_wait"
+    - condition: "obstacle_detected"
+      action: "stop_and_avoid"
+
+# 调试配置
+debug:
+  enabled: false
+  verbose_logging: false
+  save_intermediate_results: false
+  visualize_planning: false

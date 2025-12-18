@@ -1,0 +1,434 @@
+# Isaac Sim仿真环境配置文件
+# 定义仿真场景、机器人、传感器等参数
+
+# 全局配置
+simulation:
+  # 仿真模式: headless, gui, render
+  mode: "headless"
+
+  # 物理引擎: physx, bullet
+  physics_engine: "physx"
+
+  # 时间步长配置
+  physics_dt: 0.016666  # 60Hz (1/60)
+  rendering_dt: 0.016666  # 60Hz
+
+  # 重力设置
+  gravity: [0.0, 0.0, -9.81]
+
+  # 场景单位
+  stage_units: "meters"
+
+  # 启用ROS集成
+  enable_ros: false
+
+  # 启用实时同步
+  real_time: false
+
+  # 最大仿真时间（秒，-1为无限制）
+  max_time: -1
+
+# 物理引擎配置
+physics:
+  # PhysX设置
+  physx:
+    solver_type: "pgs"  # pgs (Projected Gauss-Seidel) or tgs (Temporal Gauss-Seidel)
+    num_iterations: 10
+    position_iterations: 4
+    velocity_iterations: 1
+    enable_gpu_dynamics: true
+    enable_ccd: true  # Continuous Collision Detection
+    bounce_threshold_velocity: 0.2
+    default_material:
+      static_friction: 0.5
+      dynamic_friction: 0.5
+      restitution: 0.1
+
+  # Bullet设置（备选）
+  bullet:
+    solver_iterations: 50
+    ccd_swept_sphere_radius: 0.0001
+    contact_breaking_threshold: 0.00001
+    erp: 0.2
+    contact_erp: 0.8
+
+# 场景环境配置
+scene:
+  # 地面平面
+  ground_plane:
+    enabled: true
+    size: 100.0
+    color: [0.5, 0.5, 0.5]
+
+  # 环境光照
+  lighting:
+    dome_light:
+      enabled: true
+      intensity: 1000
+      color: [1.0, 1.0, 1.0]
+
+    directional_light:
+      enabled: true
+      intensity: 5000
+      color: [1.0, 1.0, 1.0]
+      direction: [-1, -1, -1]
+
+    ambient_light:
+      enabled: true
+      intensity: 300
+      color: [0.3, 0.3, 0.3]
+
+  # 天空盒
+  skybox:
+    enabled: false
+    color: [0.5, 0.7, 1.0]
+
+# 机器人配置
+robots:
+  # 示例Franka机械臂
+  franka_emika:
+    type: "franka"
+    usd_path: "/Isaac/Robots/Franka/franka.usd"
+    position: [0.0, 0.0, 0.0]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+    fixed_base: true
+
+    # 默认关节位置
+    default_joints:
+      "panda_joint1": 0.0
+      "panda_joint2": 0.0
+      "panda_joint3": 0.0
+      "panda_joint4": -1.5708
+      "panda_joint5": 0.0
+      "panda_joint6": 1.5708
+      "panda_joint7": 0.0
+      "panda_finger_joint1": 0.0
+      "panda_finger_joint2": 0.0
+
+    # 关节限制
+    joint_limits:
+      "panda_joint1": [-2.9671, 2.9671]
+      "panda_joint2": [-1.8326, 1.8326]
+      "panda_joint3": [-2.9671, 2.9671]
+      "panda_joint4": [-3.1416, -0.0698]
+      "panda_joint5": [-2.9671, 2.9671]
+      "panda_joint6": [-0.0873, 3.8223]
+      "panda_joint7": [-2.9671, 2.9671]
+
+  # 示例UR10机械臂
+  ur10:
+    type: "ur10"
+    usd_path: "/Isaac/Robots/UniversalRobots/UR10/ur10.usd"
+    position: [2.0, 0.0, 0.0]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+    fixed_base: true
+
+    default_joints:
+      "shoulder_pan_joint": 0.0
+      "shoulder_lift_joint": -1.5708
+      "elbow_joint": 1.5708
+      "wrist_1_joint": -1.5708
+      "wrist_2_joint": 0.0
+      "wrist_3_joint": 0.0
+
+  # 示例移动机器人
+  husky:
+    type: "mobile_robot"
+    usd_path: "/Isaac/Robots/MobileRobots/ClearpathHusky/husky.usd"
+    position: [-2.0, -2.0, 0.0]
+    orientation: [0.0, 0.0, 0.7071, 0.7071]
+    fixed_base: false
+
+    # 移动机器人参数
+    mobile_params:
+      max_linear_velocity: 1.0  # m/s
+      max_angular_velocity: 1.0  # rad/s
+      wheel_radius: 0.1651  # m
+      wheel_base: 0.546  # m
+
+  # 示例四旋翼无人机
+  quadrotor:
+    type: "quadrotor"
+    usd_path: "/Isaac/Robots/Quadrotor/quadrotor.usd"
+    position: [0.0, 2.0, 1.0]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+    fixed_base: false
+
+    # 四旋翼参数
+    quadrotor_params:
+      mass: 1.0  # kg
+      arm_length: 0.17  # m
+      rotor_radius: 0.1  # m
+      max_thrust: 20.0  # N
+      max_torque: 2.0  # N*m
+
+# 传感器配置
+sensors:
+  # RGB相机配置
+  rgb_camera:
+    type: "camera"
+    sensor_name: "main_camera"
+
+    # 相机参数
+    resolution: [640, 480]
+    horizontal_fov: 90.0  # degrees
+
+    # 渲染参数
+    enable_distance_sensor: true
+    enable_instance_segmentation: true
+    enable_semantic_segmentation: false
+    enable_normals: false
+
+    # 附着到机器人
+    attach_to: "franka_emika"
+    attach_link: "panda_hand"
+
+    # 相机位置（相对于附着点）
+    relative_position: [0.1, 0.0, 0.0]
+    relative_orientation: [0.0, 0.0, 0.0, 1.0]
+
+  # 深度相机配置
+  depth_camera:
+    type: "depth_camera"
+    sensor_name: "depth_sensor"
+
+    # 深度相机参数
+    resolution: [640, 480]
+    horizontal_fov: 90.0
+
+    # 深度范围
+    min_range: 0.1  # meters
+    max_range: 10.0  # meters
+
+    attach_to: "franka_emika"
+    attach_link: "panda_hand"
+
+    relative_position: [0.1, 0.05, 0.0]
+    relative_orientation: [0.0, 0.0, 0.0, 1.0]
+
+  # 激光雷达配置
+  lidar:
+    type: "lidar"
+    sensor_name: "main_lidar"
+
+    # 激光雷达参数
+    horizontal_fov: 360.0  # degrees
+    vertical_fov: 30.0  # degrees
+    horizontal_resolution: 0.25  # degrees
+    max_range: 10.0  # meters
+    min_range: 0.1  # meters
+
+    # 点云参数
+    points_per_scan: 1440
+    scan_frequency: 10.0  # Hz
+
+    attach_to: "husky"
+    relative_position: [0.0, 0.0, 0.5]
+    relative_orientation: [0.0, 0.0, 0.0, 1.0]
+
+  # IMU配置
+  imu:
+    type: "imu"
+    sensor_name: "main_imu"
+
+    # IMU参数
+    frequency: 100.0  # Hz
+
+    # 噪声参数
+    accelerometer_noise_density: 0.01  # m/s²/√Hz
+    gyroscope_noise_density: 0.01  # rad/s/√Hz
+
+    attach_to: "quadrotor"
+    relative_position: [0.0, 0.0, 0.0]
+    relative_orientation: [0.0, 0.0, 0.0, 1.0]
+
+# 对象配置（场景中的物体）
+objects:
+  # 桌子
+  table:
+    type: "primitive"  # primitive or mesh
+    primitive_type: "cube"
+
+    # 尺寸和位置
+    size: [1.0, 0.6, 0.8]
+    position: [0.0, 0.0, 0.4]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+
+    # 物理属性
+    mass: 10.0
+    friction: 0.5
+    restitution: 0.1
+
+    # 外观
+    color: [0.6, 0.4, 0.2]
+    metallic: 0.0
+    roughness: 0.8
+
+  # 抓取物体（方块）
+  cube_object:
+    type: "primitive"
+    primitive_type: "cube"
+
+    size: [0.05, 0.05, 0.05]
+    position: [0.3, 0.0, 0.85]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+
+    mass: 0.1
+    friction: 0.5
+    restitution: 0.3
+
+    color: [0.2, 0.6, 0.8]
+    metallic: 0.1
+    roughness: 0.5
+
+  # 抓取物体（球体）
+  sphere_object:
+    type: "primitive"
+    primitive_type: "sphere"
+
+    radius: 0.03
+    position: [-0.3, 0.2, 0.8]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+
+    mass: 0.05
+    friction: 0.4
+    restitution: 0.7
+
+    color: [0.8, 0.2, 0.2]
+    metallic: 0.2
+    roughness: 0.3
+
+  # 障碍物（墙壁）
+  wall1:
+    type: "primitive"
+    primitive_type: "cube"
+
+    size: [0.1, 5.0, 3.0]
+    position: [3.0, 0.0, 1.5]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+
+    fixed: true  # 固定物体
+    color: [0.3, 0.3, 0.3]
+
+  wall2:
+    type: "primitive"
+    primitive_type: "cube"
+
+    size: [5.0, 0.1, 3.0]
+    position: [0.0, 3.0, 1.5]
+    orientation: [0.0, 0.0, 0.0, 1.0]
+
+    fixed: true
+    color: [0.3, 0.3, 0.3]
+
+# 任务场景配置
+scenarios:
+  # 抓取任务
+  pick_and_place:
+    name: "Pick and Place Task"
+    description: "使用Franka机械臂抓取方块并放置到目标位置"
+
+    # 预定义的机器人
+    robots:
+      - "franka_emika"
+
+    # 预定义的传感器
+    sensors:
+      - "rgb_camera"
+      - "depth_camera"
+
+    # 预定义的对象
+    objects:
+      - "table"
+      - "cube_object"
+
+    # 目标位置
+    target_positions:
+      pick: [0.3, 0.0, 0.85]
+      place: [-0.3, -0.3, 0.85]
+
+  # 导航任务
+  navigation:
+    name: "Mobile Robot Navigation"
+    description: "移动机器人导航到指定位置并避开障碍物"
+
+    robots:
+      - "husky"
+
+    sensors:
+      - "lidar"
+
+    objects:
+      - "wall1"
+      - "wall2"
+
+    # 航点
+    waypoints:
+      start: [-2.0, -2.0, 0.0]
+      goal: [2.0, 2.0, 0.0]
+
+  # 四旋翼飞行任务
+  quadrotor_flight:
+    name: "Quadrotor Flight Control"
+    description: "四旋翼无人机自主飞行控制"
+
+    robots:
+      - "quadrotor"
+
+    sensors:
+      - "imu"
+      - "rgb_camera"
+
+    # 飞行路径
+    flight_path:
+      takeoff: [0.0, 2.0, 1.0]
+      waypoints:
+        - [1.0, 2.0, 1.0]
+        - [1.0, 3.0, 1.5]
+        - [0.0, 3.0, 1.5]
+        - [0.0, 2.0, 1.0]
+      land: [0.0, 2.0, 0.0]
+
+# 数据记录配置
+data_recording:
+  # 启用数据记录
+  enabled: true
+
+  # 记录频率
+  frequency: 30  # Hz
+
+  # 记录的数据类型
+  record_types:
+    - "robot_states"
+    - "sensor_data"
+    - "simulation_time"
+    - "object_poses"
+
+  # 输出路径
+  output_directory: "./data/simulation_logs"
+
+  # 文件格式
+  file_format: "hdf5"  # hdf5, csv, pickle
+
+  # 压缩
+  compression: true
+
+# 调试和可视化配置
+debug:
+  # 启用调试信息
+  enabled: true
+
+  # 显示坐标轴
+  show_axes: true
+
+  # 显示碰撞形状
+  show_collision_shapes: true
+
+  # 显示关节坐标系
+  show_joint_frames: true
+
+  # 启用性能监控
+  enable_profiling: true
+
+  # 日志级别
+  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR

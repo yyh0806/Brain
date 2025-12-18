@@ -1,0 +1,151 @@
+# 优化的BRAIN Isaac Sim Docker镜像
+# 多阶段构建 + 层缓存优化
+FROM python:3.9-slim as base
+
+# 设置环境变量
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# 安装系统依赖 (使用APT缓存优化)
+RUN --mount=type=cache,target=/var/cache/apt \
+    --mount=type=cache,target=/var/lib/apt \
+    apt-get update && apt-get install -y \
+    # 基础依赖
+    python3-pip \
+    python3-dev \
+    build-essential \
+    # 开发工具
+    git \
+    wget \
+    curl \
+    vim \
+    # 科学计算依赖
+    libgl1-mesa-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    # 清理
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/*
+
+# 升级pip
+RUN python3 -m pip install --upgrade pip setuptools wheel
+
+# =========== 依赖安装阶段 ===========
+FROM base as dependencies
+
+# 安装核心Python依赖 (使用pip cache)
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
+    # 核心框架
+    pydantic==2.10.6 \
+    python-dotenv==1.0.1 \
+    pyyaml==6.0.3 \
+    loguru==0.7.3 \
+    # 科学计算
+    numpy==1.24.4 \
+    # 机器学习 (轻量级)
+    scikit-learn==1.3.2 \
+    # Web框架
+    streamlit==1.40.1 \
+    # 开发环境
+    jupyterlab==4.3.8
+
+# 安装仿真和视觉依赖
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
+    # 物理仿真
+    pygame==2.6.1 \
+    pybullet==3.2.7 \
+    # 计算机视觉
+    opencv-python==4.12.0.88 \
+    # 数据可视化
+    plotly==5.20.0 \
+    matplotlib==3.7.5 \
+    # 数据处理
+    pandas==2.0.3
+
+# =========== 运行时阶段 ===========
+FROM dependencies as runtime
+
+# 设置工作目录
+WORKDIR /workspace/brain
+
+# 复制项目文件 (优化COPY顺序，少变化的文件优先)
+COPY requirements*.txt ./
+COPY brain/ brain/
+COPY *.py ./
+
+# 安装项目特定依赖 (如果存在)
+RUN if [ -f requirements.docker.txt ]; then \
+        --mount=type=cache,target=/root/.cache/pip \
+        pip3 install -r requirements.docker.txt; \
+    fi
+
+# 创建必要目录
+RUN mkdir -p /workspace/data /workspace/logs /workspace/outputs /workspace/config
+
+# 设置Python路径
+ENV PYTHONPATH="/workspace/brain:${PYTHONPATH}"
+
+# 创建非root用户 (安全优化)
+RUN useradd -m -u 1000 brain && \
+    chown -R brain:brain /workspace
+
+USER brain
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python3 -c "import brain.cognitive.world_model; print('✅ Health check passed')" || exit 1
+
+# 暴露端口
+EXPOSE 8888 8501
+
+# 启动脚本
+COPY --chown=brain:brain <<EOF /entrypoint.sh
+#!/bin/bash
+set -e
+
+echo "🧠 BRAIN Isaac Sim Container Starting..."
+echo "📊 Python: \$(python3 --version)"
+echo "🐳 Docker Image: \$(cat /etc/os-release | grep PRETTY_NAME)"
+echo "🎯 Working Directory: \$(pwd)"
+echo "🔧 Python Path: \${PYTHONPATH}"
+
+# 切换到工作目录
+cd /workspace/brain
+
+# 执行传入的命令
+exec "\$@"
+EOF
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python3", "run_complete_system_demo.py", "--mode", "quick"]
+
+# =========== 开发版本 ===========
+FROM runtime as development
+
+# 切换回root用户安装开发依赖
+USER root
+
+# 安装开发工具
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip3 install \
+    pytest==7.4.4 \
+    black==23.12.1 \
+    flake8==6.1.0 \
+    ipython==8.18.1 \
+    notebook==7.1.0
+
+# 切换回brain用户
+USER brain
+
+# 开发模式默认命令
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token=brain2024"]

@@ -19,13 +19,15 @@ __version__ = "1.0.0"
 __author__ = "Brain Team"
 
 from brain.core.brain import Brain
-from brain.core.task_planner import TaskPlanner
-from brain.core.executor import Executor
+from brain.planning.task.task_planner import TaskPlanner
+from brain.execution.executor import Executor
+from brain.core.monitor import SystemMonitor
 
 __all__ = [
     "Brain",
-    "TaskPlanner", 
+    "TaskPlanner",
     "Executor",
+    "SystemMonitor",
     "__version__",
 ]
 

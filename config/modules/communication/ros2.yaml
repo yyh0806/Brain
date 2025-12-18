@@ -1,0 +1,117 @@
+# ROS2通信配置
+
+ros2:
+  # 节点配置
+  node_name: "brain_node"
+  namespace: ""
+
+  # 运行模式
+  mode: "real"  # real, simulation
+
+  # 话题配置
+  topics:
+    # 命令话题
+    cmd_vel: "/cmd_vel"
+    cmd_pose: "/cmd_pose"
+    cmd_path: "/cmd_path"
+
+    # 传感器话题
+    rgb_image: "/camera/rgb/image_raw"
+    depth_image: "/camera/depth/image_raw"
+    camera_info: "/camera/rgb/camera_info"
+    laser_scan: "/scan"
+    pointcloud: "/lidar/points"
+    odom: "/odom"
+    imu: "/imu/data"
+    gps: "/gps/fix"
+    magnetometer: "/mag"
+    altitude: "/altitude"
+
+    # 地图话题
+    map: "/map"
+    costmap: "/costmap"
+    occupancy_grid: "/occupancy_grid"
+
+    # 状态话题
+    robot_state: "/robot_state"
+    battery_state: "/battery_state"
+    system_status: "/system_status"
+
+  # 服务配置
+  services:
+    start_navigation: "/start_navigation"
+    stop_navigation: "/stop_navigation"
+    pause_navigation: "/pause_navigation"
+    resume_navigation: "/resume_navigation"
+    set_goal: "/set_goal"
+    get_pose: "/get_pose"
+    emergency_stop: "/emergency_stop"
+
+  # 动作服务器配置
+  actions:
+    navigate_to_pose: "/navigate_to_pose"
+    follow_path: "/follow_path"
+    explore: "/explore"
+    recovery: "/recovery"
+
+  # QoS配置
+  qos:
+    # 传感器数据QoS
+    sensor:
+      reliability: "best_effort"
+      durability: "volatile"
+      depth: 10
+      deadline: 0.0
+
+    # 命令QoS
+    command:
+      reliability: "reliable"
+      durability: "volatile"
+      depth: 10
+      deadline: 1.0
+
+    # 状态QoS
+    state:
+      reliability: "reliable"
+      durability: "transient_local"
+      depth: 1
+      deadline: 0.0
+
+  # 参数配置
+  parameters:
+    # 频率配置
+    publish_frequency: 10.0  # Hz
+    update_frequency: 50.0    # Hz
+
+    # 缓冲区大小
+    message_buffer_size: 100
+    point_cloud_buffer_size: 1000
+
+    # 超时配置
+    connection_timeout: 5.0  # seconds
+    message_timeout: 1.0     # seconds
+
+  # TF配置
+  tf:
+    # 坐标系配置
+    base_frame: "base_link"
+    odom_frame: "odom"
+    map_frame: "map"
+    camera_frame: "camera_link"
+    lidar_frame: "lidar_link"
+    imu_frame: "imu_link"
+
+    # 广播频率
+    publish_rate: 50.0  # Hz
+
+    # 缓存时间
+    cache_time: 10.0  # seconds
+
+  # 多机器人配置
+  multi_robot:
+    enabled: false
+    robot_prefix_env: "ROBOT_PREFIX"
+    robot_id_env: "ROBOT_ID"
+    shared_topics:
+      - "/world_model"
+      - "/task_allocation"

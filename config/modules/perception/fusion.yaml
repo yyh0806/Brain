@@ -1,0 +1,65 @@
+# 传感器融合配置
+
+# 传感器融合配置
+sensor_fusion:
+  enabled: true
+
+  # 融合算法
+  algorithm: "ekf"  # ekf (扩展卡尔曼滤波), ukf (无迹卡尔曼滤波), particle (粒子滤波)
+
+  # 滤波器参数
+  filter:
+    # EKF参数
+    ekf:
+      process_noise:
+        position: 0.1
+        velocity: 0.5
+        orientation: 0.1
+        angular_velocity: 0.5
+
+      measurement_noise:
+        gps_position: 1.0
+        imu_acceleration: 0.1
+        imu_angular_velocity: 0.1
+        visual_odometry: 0.5
+
+    # UKF参数
+    ukf:
+      alpha: 0.001
+      beta: 2.0
+      kappa: 0.0
+
+  # 传感器权重
+  sensor_weights:
+    camera: 0.3
+    lidar: 0.4
+    gps: 0.2
+    imu: 0.1
+
+  # 更新频率
+  update_rate: 50.0  # Hz
+
+  # 坐标系变换
+  coordinate_frames:
+    base_link: "base_link"
+    odom: "odom"
+    map: "map"
+    camera: "camera_link"
+    lidar: "lidar_link"
+
+  # 传感器标定
+  calibration:
+    camera_to_base:
+      translation: [0.0, 0.0, 0.1]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+
+    lidar_to_base:
+      translation: [0.0, 0.0, 0.5]
+      rotation: [0.0, 0.0, 0.0, 1.0]
+
+# 数据关联
+data_association:
+  max_distance: 2.0  # meters
+  gate_probability: 0.99
+  nearest_neighbor: true
+  Hungarian_algorithm: false

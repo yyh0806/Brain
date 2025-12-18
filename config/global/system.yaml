@@ -1,0 +1,57 @@
+# Brain系统全局配置
+
+system:
+  name: "Brain-Autonomous-System"
+  version: "1.0.0"
+  log_level: "INFO"
+  max_concurrent_tasks: 10
+  heartbeat_interval: 1.0  # seconds
+
+  # 运行模式
+  mode: "development"  # development, production, testing
+
+  # 数据路径
+  data_paths:
+    log_dir: "./data/logs"
+    state_dir: "./data/state"
+    checkpoint_dir: "./data/checkpoints"
+    temp_dir: "./data/temp"
+
+# 错误恢复配置
+recovery:
+  enabled: true
+  max_rollback_steps: 10
+  replan_on_failure: true
+  safe_mode_on_critical: true
+  error_thresholds:
+    warning: 3
+    critical: 5
+
+# 通信配置
+communication:
+  default_protocol: "zmq"  # zmq, grpc, ros2
+  command_port: 5555
+  telemetry_port: 5556
+  heartbeat_timeout: 5.0
+  message_queue_size: 1000
+
+# 状态管理配置
+state:
+  persistence: true
+  history_length: 1000
+  auto_save_interval: 10  # seconds
+
+# 日志配置
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  handlers:
+    - type: "console"
+      enabled: true
+    - type: "file"
+      enabled: true
+      max_size: "10MB"
+      backup_count: 5
+    - type: "syslog"
+      enabled: false
+      address: "/dev/log"

@@ -554,7 +554,7 @@ class CommandQueue:
             }
         }
 
-    def clear_queue(self) -> int:
+    async def clear_queue(self) -> int:
         """清空队列"""
         async with self._queue_lock:
             count = len(self._priority_queue)
@@ -562,7 +562,7 @@ class CommandQueue:
             logger.info(f"清空命令队列: 移除 {count} 个命令")
             return count
 
-    def get_queue_status(self) -> Dict[str, Any]:
+    async def get_queue_status(self) -> Dict[str, Any]:
         """获取队列状态"""
         async with self._queue_lock:
             # 按优先级统计

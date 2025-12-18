@@ -1,0 +1,91 @@
+# 用户个性化配置 - yangyuhui
+
+# 个性化LLM配置
+llm:
+  # 偏好使用的模型
+  preferred_models:
+    primary: "deepseek-r1:latest"
+    secondary: "llama3:latest"
+    vision: "llava:7b"
+
+  # API配置
+  api_base: "http://localhost:11434"
+  timeout: 180  # 更长的超时时间
+
+# 个性化感知配置
+perception:
+  # VLM配置偏好
+  vlm:
+    # 更高的分辨率以获得更好的理解
+    image_resolution: "original"
+    # 更频繁的场景分析
+    scene_analysis_interval: 2.0
+
+# 机器人偏好配置
+robot:
+  # 速度偏好
+  speed_profile:
+    conservative:  # 保守模式
+      max_speed: 0.3
+      acceleration: 0.2
+    normal:  # 正常模式
+      max_speed: 0.5
+      acceleration: 0.3
+    aggressive:  # 激进模式
+      max_speed: 0.8
+      acceleration: 0.5
+
+# 调试配置
+debug:
+  # 启用详细日志
+  verbose_logging: true
+  # 保存中间结果
+  save_intermediate_results: true
+  # 可视化规划过程
+  visualize_planning: true
+
+# 日志配置
+logging:
+  # 用户特定的日志级别
+  level: "DEBUG"
+  # 个人日志文件
+  personal_log_file: "logs/yangyuhui_brain.log"
+
+# 个性化设置
+preferences:
+  # 语言设置
+  language: "zh-CN"
+
+  # 提示词风格
+  prompt_style: "detailed"  # detailed, concise, technical
+
+  # 自动确认阈值
+  auto_confirm_threshold:
+    low_risk: true
+    medium_risk: false
+    high_risk: false
+
+# 实验性功能
+experimental:
+  # 启用实验性功能
+  enabled: true
+
+  # 功能列表
+  features:
+    - "advanced_path_planning"
+    - "multi_modal_perception"
+    - "predictive_control"
+
+# 快捷配置
+shortcuts:
+  # 预定义的任务配置
+  tasks:
+    quick_exploration:
+      type: "exploration"
+      duration: 60  # seconds
+      speed: "normal"
+
+    demo_navigation:
+      type: "navigation"
+      waypoints: 5
+      speed: "conservative"

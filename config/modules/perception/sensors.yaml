@@ -1,0 +1,58 @@
+# 感知传感器配置
+
+# 基础感知配置
+perception:
+  update_rate: 10.0  # Hz
+  data_fusion_enabled: true
+  coordinate_frame: "odom"
+
+# 传感器配置
+sensors:
+  # RGB相机
+  camera:
+    enabled: true
+    type: "camera"
+    resolution: [1920, 1080]
+    fps: 30
+    field_of_view: 90.0  # degrees
+    depth_range: [0.1, 10.0]  # meters
+    distortion_model: "radial-tangential"
+
+  # 深度相机
+  depth_camera:
+    enabled: true
+    type: "depth_camera"
+    resolution: [640, 480]
+    fps: 30
+    depth_range: [0.1, 10.0]  # meters
+    accuracy: 0.01  # meters
+    baseline: 0.1  # meters (for stereo)
+
+  # 激光雷达
+  lidar:
+    enabled: true
+    type: "lidar"
+    range: 100.0  # meters
+    points_per_second: 300000
+    horizontal_fov: 360.0  # degrees
+    vertical_fov: 30.0  # degrees
+    accuracy: 0.02  # meters
+    scan_frequency: 10.0  # Hz
+
+  # GPS
+  gps:
+    enabled: true
+    type: "gps"
+    accuracy: 0.01  # meters
+    update_rate: 10  # Hz
+    coordinate_system: "WGS84"
+    differential_enabled: false
+
+  # IMU
+  imu:
+    enabled: true
+    type: "imu"
+    rate: 100  # Hz
+    accelerometer_noise_density: 0.01  # m/s²/√Hz
+    gyroscope_noise_density: 0.01  # rad/s/√Hz
+    magnetometer_noise_density: 0.001  # gauss/√Hz
