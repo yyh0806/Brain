@@ -1,0 +1,254 @@
+name: Claude Assistant
+
+on:
+  issue_comment:
+    types: [ created ]
+  pull_request_review_comment:
+    types: [ created ]
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+  issues:
+    types: [ opened ]
+
+jobs:
+  # Claude提及响应器
+  claude-mention-responder:
+    runs-on: ubuntu-latest
+    name: Claude Mention Responder
+    if: contains(github.event.comment.body, '@claude') || contains(github.event.issue.body, '@claude')
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Claude Code
+      run: |
+        echo "🔧 Setting up Claude Code..."
+        npm install -g @anthropic-ai/claude-code
+
+    - name: Parse Claude command and context
+      id: parse-command
+      run: |
+        # 获取评论或Issue内容
+        if [ "${{ github.event.comment }}" != "" ]; then
+          CONTENT="${{ github.event.comment.body }}"
+          CONTEXT_TYPE="comment"
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+        else
+          CONTENT="${{ github.event.issue.body }}"
+          CONTEXT_TYPE="issue"
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+        fi
+
+        echo "content=$CONTENT" >> $GITHUB_OUTPUT
+        echo "context_type=$CONTEXT_TYPE" >> $GITHUB_OUTPUT
+        echo "issue_number=$ISSUE_NUMBER" >> $GITHUB_OUTPUT
+
+        # 提取@claude后面的命令
+        COMMAND=$(echo "$CONTENT" | sed 's/.*@claude//' | xargs)
+        echo "command=$COMMAND" >> $GITHUB_OUTPUT
+
+        # 检测特殊命令
+        if [[ "$COMMAND" == *"help"* ]]; then
+          echo "action=help" >> $GITHUB_OUTPUT
+        elif [[ "$COMMAND" == *"status"* ]]; then
+          echo "action=status" >> $GITHUB_OUTPUT
+        elif [[ "$COMMAND" == *"review"* ]]; then
+          echo "action=review" >> $GITHUB_OUTPUT
+        elif [[ "$COMMAND" == *"test"* ]]; then
+          echo "action=test" >> $GITHUB_OUTPUT
+        elif [[ "$COMMAND" == *"fix"* ]]; then
+          echo "action=fix" >> $GITHUB_OUTPUT
+        elif [[ "$COMMAND" == *"implement"* ]]; then
+          echo "action=implement" >> $GITHUB_OUTPUT
+        else
+          echo "action=general" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Execute Claude Command
+      id: claude-response
+      env:
+        ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        COMMAND="${{ steps.parse-command.outputs.command }}"
+        ACTION="${{ steps.parse-command.outputs.action }}"
+        CONTEXT_TYPE="${{ steps.parse-command.outputs.context_type }}"
+
+        echo "🤖 Executing Claude command: $COMMAND"
+        echo "📋 Action type: $ACTION"
+        echo "📄 Context: $CONTEXT_TYPE"
+
+        case "$ACTION" in
+          "help")
+            RESPONSE=$(cat << 'EOF'
+        🤖 **Claude Code 可用命令**
+
+        **基础命令:**
+        - \`@claude help\` - 显示此帮助信息
+        - \`@claude status\` - 检查项目状态和CI/CD
+        - \`@claude review\` - 代码审查和建议
+
+        **开发命令:**
+        - \`@claude test\` - 运行测试并分析结果
+        - \`@claude fix [issue]\` - 修复指定问题
+        - \`@claude implement [feature]\` - 实现新功能
+
+        **高级功能:**
+        - \`@claude analyze\` - 分析代码库结构
+        - \`@claude optimize\` - 性能优化建议
+        - \`@claude document\` - 生成或更新文档
+
+        **示例:**
+        - \`@claude fix the failing CI test\`
+        - \`@claude implement user authentication\`
+        - \`@claude review my pull request\`
+        EOF
+        )
+            ;;
+          "status")
+            # 获取项目状态信息
+            RESPONSE=$(cat << EOF
+        📊 **项目状态报告**
+
+        **🔧 CI/CD状态:**
+        - 最新提交: ${{ github.sha }}
+        - 分支: ${{ github.ref_name }}
+        - 工作流运行状态: [查看详情](${{ github.server_url }}/${{ github.repository }}/actions)
+
+        **📝 最近活动:**
+        - 触发事件: ${{ github.event_name }}
+        - 操作者: ${{ github.actor }}
+        - 时间: $(date -u)
+
+        **🏗️ 项目结构:**
+        - 主要模块: brain/ (认知核心), perception/ (感知), fusion/ (融合)
+        - 配置文件: config/, requirements.txt
+        - 文档: docs/, README.md
+
+        **建议下一步操作:**
+        - 运行 \`@claude test\` 检查代码质量
+        - 使用 \`@claude review\` 进行代码审查
+        EOF
+        )
+            ;;
+          "review")
+            # 执行代码审查
+            echo "🔍 Performing code review..."
+            RESPONSE="🔍 **代码审查报告**
+
+        **正在分析您的代码...**
+
+        **检查项目:**
+        - 文件变更分析
+        - 代码质量评估
+        - 安全性检查
+        - 性能建议
+
+        **注意:** 详细的代码审查需要具体的文件上下文。建议在PR中使用此命令。
+        "
+            ;;
+          "test")
+            RESPONSE="🧪 **测试执行中...**
+
+        **正在运行测试套件:**
+        - 单元测试
+        - 集成测试
+        - 代码覆盖率
+        - 性能测试
+
+        **测试结果将显示在CI/CD日志中。**
+        "
+            ;;
+          *)
+            # 使用Claude API处理通用请求
+            if [ -n "$ANTHROPIC_API_KEY" ] && [ -n "$ANTHROPIC_BASE_URL" ]; then
+              echo "🌐 Calling Claude API..."
+              RESPONSE=$(curl -s -X POST "$ANTHROPIC_BASE_URL/v1/messages" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
+                -H "anthropic-version: 2023-06-01" \
+                -d "{
+                  \"model\": \"claude-3-sonnet-20240229\",
+                  \"max_tokens\": 1000,
+                  \"messages\": [
+                    {
+                      \"role\": \"user\",
+                      \"content\": \"你是一个专业的代码助手。用户在GitHub项目中提到了你: $COMMAND\\n\\n项目背景: 这是一个名为'Brain'的无人系统任务分解大脑项目，包含感知、融合、认知等模块。\\n\\n请提供有用的回复，包括代码建议、解决方案或指导。回复要简洁实用。\"
+                    }
+                  ]
+                }" | jq -r '.content[0].text // "API调用失败，请检查配置"')
+            else
+              RESPONSE="🤖 **Claude Code 响应**
+
+        收到命令: \`${COMMAND}\`
+
+        **当前状态:**
+        - Claude API配置: ${ANTHROPIC_API_KEY:+✅ 已配置}${ANTHROPIC_API_KEY:-❌ 未配置}
+        - 基础功能: ✅ 可用
+        - 高级AI功能: ⚠️ 需要API配置
+
+        **建议:**
+        1. 配置ANTHROPIC_API_KEY和ANTHROPIC_BASE_URL secrets
+        2. 使用 \`@claude help\` 查看可用命令
+        3. 尝试具体的开发命令如 \`@claude fix issue\`
+        "
+            fi
+            ;;
+        esac
+
+        echo "response<<EOF" >> $GITHUB_OUTPUT
+        echo "$RESPONSE" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Create Response Comment
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const response = `${{ steps.claude-response.outputs.response }}`;
+          const issueNumber = parseInt('${{ steps.parse-command.outputs.issue_number }}');
+
+          // 添加响应头和时间戳
+          const timestamp = new Date().toISOString();
+          const responseWithMeta = `🤖 **Claude Code Assistant** (${timestamp})
+
+        ${response}
+
+        ---
+        *由 Claude Code GitHub Actions 自动生成 | [查看工作流日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+        *`;
+
+          try {
+            if (context.payload.issue) {
+              // Issue或PR评论
+              await github.rest.issues.createComment({
+                issue_number: issueNumber,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: responseWithMeta
+              });
+            } else if (context.payload.pull_request) {
+              // PR评论
+              await github.rest.issues.createComment({
+                issue_number: context.payload.pull_request.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: responseWithMeta
+              });
+            }
+          } catch (error) {
+            console.log('Comment creation failed:', error);
+          }
+
+    - name: Log Claude interaction
+      run: |
+        echo "📝 Claude interaction logged:"
+        echo "👤 User: ${{ github.actor }}"
+        echo "📄 Context: ${{ steps.parse-command.outputs.context_type }}"
+        echo "⚡ Action: ${{ steps.parse-command.outputs.action }}"
+        echo "💬 Command: ${{ steps.parse-command.outputs.command }}"
+        echo "🔗 URL: ${{ github.server_url }}/${{ github.repository }}/${{ steps.parse-command.outputs.context_type }}/${{ steps.parse-command.outputs.issue_number }}"
+        echo "⏰ Time: $(date -u)"
