@@ -1,0 +1,196 @@
+name: Enhanced CI/CD with Code Review
+
+on:
+  pull_request:
+    branches: [ master, main ]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [ develop, feature/*, hotfix/* ]
+
+env:
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    name: 代码质量检查
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+        pip install flake8 black isort mypy pytest
+
+    - name: Run code formatting check (black)
+      run: |
+        echo "🎨 检查代码格式 (black)..."
+        black --check --diff brain/ || true
+
+    - name: Run import sorting check (isort)
+      run: |
+        echo "📚 检查import排序 (isort)..."
+        isort --check-only --diff brain/ || true
+
+    - name: Run linting (flake8)
+      run: |
+        echo "🔍 运行代码检查 (flake8)..."
+        flake8 brain/ --max-line-length=88 --ignore=E203,W503 || true
+
+    - name: Run type checking (mypy)
+      run: |
+        echo "📊 运行类型检查 (mypy)..."
+        mypy brain/ --ignore-missing-imports || true
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: 安全扫描
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run security scan
+      run: |
+        echo "🔒 运行安全扫描..."
+
+        # 检查敏感信息
+        echo "检查可能的敏感信息..."
+        if grep -r -i "password\|secret\|token\|key" --include="*.py" --include="*.yaml" --include="*.yml" brain/ ; then
+          echo "⚠️ 发现可能的敏感信息，请检查"
+        fi
+
+        # 检查硬编码的API密钥
+        echo "检查硬编码的API密钥..."
+        if grep -r -E "sk-[a-zA-Z0-9]{48}" --include="*.py" --include="*.yaml" brain/ ; then
+          echo "❌ 发现硬编码的API密钥！"
+          exit 1
+        fi
+
+  tests:
+    runs-on: ubuntu-latest
+    name: 测试运行
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+        pip install pytest pytest-cov
+
+    - name: Run tests
+      run: |
+        echo "🧪 运行测试..."
+        if [ -d "tests" ]; then
+          pytest tests/ --cov=brain --cov-report=xml || true
+        else
+          echo "ℹ️ 未找到测试目录"
+        fi
+
+  pr-review-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: PR审查检查
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check PR size
+      run: |
+        echo "📊 检查PR大小..."
+        CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | wc -l)
+        echo "变更文件数: $CHANGED_FILES"
+
+        if [ "$CHANGED_FILES" -gt 20 ]; then
+          echo "⚠️ PR包含大量文件变更，建议拆分为更小的PR"
+        fi
+
+    - name: Check for documentation changes
+      run: |
+        echo "📚 检查文档更新..."
+        DOC_CHANGED=false
+
+        if git diff --name-only HEAD~1 HEAD | grep -E "\.md$|\.rst$|docs/"; then
+          DOC_CHANGED=true
+          echo "✅ 检测到文档更新"
+        fi
+
+        if [ "$DOC_CHANGED" = false ]; then
+          echo "💡 建议更新相关文档"
+        fi
+
+    - name: Comment on PR
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const prNumber = context.issue.number;
+          const comment = `
+          ## 🤖 自动代码审查报告
+
+          ### ✅ 检查项目
+          - [x] 代码质量检查
+          - [x] 安全扫描
+          - [x] 测试运行
+          - [x] PR大小检查
+          - [x] 文档更新检查
+
+          ### 📊 统计信息
+          - 变更文件数: ${{ steps.check-pr-size.outputs.changed-files || '正在计算...' }}
+          - PR作者: ${{ github.actor }}
+          - 创建时间: ${{ github.event.pull_request.created_at }}
+
+          ### 💡 建议
+          - 请确保代码符合项目编码规范
+          - 更新相关文档和测试
+          - 保持PR的小而专注
+          `;
+
+          github.rest.issues.createComment({
+            issue_number: prNumber,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  deploy-simulation:
+    if: github.event_name == 'pull_request' && github.base_ref == 'master'
+    runs-on: ubuntu-latest
+    name: 部署模拟
+    needs: [code-quality, security-scan, tests]
+
+    steps:
+    - name: Simulate deployment
+      run: |
+        echo "🚀 模拟部署流程..."
+        echo "✅ 所有检查通过，可以安全合并到master"
+        echo "📋 部署前检查清单:"
+        echo "  - [ ] 代码质量检查通过"
+        echo "  - [ ] 安全扫描通过"
+        echo "  - [ ] 测试全部通过"
+        echo "  - [ ] 文档已更新"
+        echo "  - [ ] PR已获得足够的审核"

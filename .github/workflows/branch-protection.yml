@@ -1,0 +1,70 @@
+name: Branch Protection and PR Validation
+
+on:
+  pull_request:
+    branches: [ master, main ]
+  push:
+    branches: [ master, main ]
+
+jobs:
+  prevent-direct-push:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check if push is direct
+      run: |
+        echo "❌ 直接推送到master分支是不被允许的！"
+        echo "请通过Pull Request的方式来提交代码"
+        exit 1
+
+  pr-validation:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check PR requirements
+      run: |
+        echo "✅ PR创建成功"
+        echo "📊 PR信息:"
+        echo "  - 来源分支: ${{ github.head_ref }}"
+        echo "  - 目标分支: ${{ github.base_ref }}"
+        echo "  - PR作者: ${{ github.actor }}"
+
+    - name: Run code quality checks
+      run: |
+        echo "🔍 运行代码质量检查..."
+
+        # 检查Python代码格式
+        if command -v python3 >/dev/null 2>&1; then
+          echo "检查Python文件..."
+          find . -name "*.py" -not -path "./.*" -not -path "./venv/*" -not -path "./env/*" | head -5
+        fi
+
+    - name: Check commit messages
+      run: |
+        echo "📝 检查提交信息格式..."
+
+        # 获取最新的提交信息
+        COMMIT_MSG=$(git log -1 --pretty=format:"%s")
+        echo "最新提交信息: $COMMIT_MSG"
+
+        # 简单的提交信息格式检查
+        if [[ ${#COMMIT_MSG} -lt 10 ]]; then
+          echo "⚠️ 提交信息太短，请提供更详细的描述"
+        fi
+
+  merge-check:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+    - name: Log merge information
+      run: |
+        echo "🎉 PR已合并到master"
+        echo "📈 合并信息:"
+        echo "  - PR编号: #${{ github.event.pull_request.number }}"
+        echo "  - 合并者: ${{ github.event.pull_request.merged_by.login }}"
+        echo "  - 合并时间: $(date)"
