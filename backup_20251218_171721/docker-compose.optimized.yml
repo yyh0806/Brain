@@ -1,0 +1,299 @@
+# 优化的Docker Compose配置
+# 包含性能优化、资源限制和健康检查
+name: brain-optimized
+
+services:
+  # 主要的BRAIN Isaac Sim服务
+  brain-main:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+      target: runtime
+    image: brain-optimized:latest
+    container_name: brain-main
+    restart: unless-stopped
+
+    # GPU和运行时配置
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,graphics
+      - PYTHONPATH=/workspace/brain
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4'
+        reservations:
+          memory: 2G
+          cpus: '2'
+
+    # 端口映射
+    ports:
+      - "8888:8888"   # Jupyter/Web服务
+      - "8501:8501"   # Streamlit Dashboard
+
+    # 卷挂载 (优化性能)
+    volumes:
+      - type: bind
+        source: ./data
+        target: /workspace/data
+        bind:
+          propagation: shared
+      - type: bind
+        source: ./logs
+        target: /workspace/logs
+        bind:
+          propagation: shared
+      - type: bind
+        source: ./config
+        target: /workspace/config
+        bind:
+          propagation: shared
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 1G
+          mode: 1777
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import brain.cognitive.world_model; print('Health OK')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 网络配置
+    networks:
+      - brain-network
+
+    # 默认命令
+    command: ["python3", "run_complete_system_demo.py", "--mode", "full"]
+
+  # Jupyter Lab开发环境
+  jupyter-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+      target: development
+    image: brain-dev:latest
+    container_name: brain-jupyter
+    restart: unless-stopped
+
+    # 轻量级GPU配置
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYTHONPATH=/workspace/brain
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=brain2024
+
+    # 资源限制 (开发环境较小)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2'
+        reservations:
+          memory: 1G
+          cpus: '1'
+
+    # 端口映射 (避免冲突)
+    ports:
+      - "8889:8888"
+
+    # 开发卷挂载
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace/brain
+        bind:
+          propagation: rshared
+      - type: bind
+        source: ./data
+        target: /workspace/data
+      - type: bind
+        source: ./logs
+        target: /workspace/logs
+      - type: bind
+        source: ./docs
+        target: /workspace/docs
+      - type: bind
+        source: ./tests
+        target: /workspace/tests
+
+    # 开发环境健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    networks:
+      - brain-network
+
+    # Jupyter命令
+    command: [
+      "jupyter", "lab",
+      "--ip=0.0.0.0",
+      "--port=8888",
+      "--no-browser",
+      "--allow-root",
+      "--NotebookApp.token=brain2024",
+      "--NotebookApp.password=''",
+      "--LabApp.default_url=/lab"
+    ]
+
+  # Streamlit监控面板
+  streamlit-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.optimized
+      target: runtime
+    image: brain-optimized:latest
+    container_name: brain-dashboard
+    restart: unless-stopped
+
+    # 轻量级配置
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYTHONPATH=/workspace/brain
+
+    # 较小的资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+
+    # 端口映射
+    ports:
+      - "8502:8501"
+
+    # 数据卷
+    volumes:
+      - type: bind
+        source: ./data
+        target: /workspace/data
+        bind:
+          propagation: shared
+      - type: bind
+        source: ./logs
+        target: /workspace/logs
+      - type: tmpfs
+        target: /tmp/streamlit
+        tmpfs:
+          size: 256M
+
+    # Streamlit健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    networks:
+      - brain-network
+
+    # Streamlit命令
+    command: [
+      "streamlit", "run", "streamlit_docker_dashboard.py",
+      "--server.address=0.0.0.0",
+      "--server.port=8501",
+      "--server.headless=true",
+      "--server.enableCORS=false",
+      "--server.enableXsrfProtection=false"
+    ]
+
+  # 负载均衡器 (可选)
+  nginx-lb:
+    image: nginx:alpine
+    container_name: brain-nginx
+    restart: unless-stopped
+
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+    # 端口映射
+    ports:
+      - "80:80"
+      - "443:443"
+
+    # 配置文件
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+
+    # 依赖关系
+    depends_on:
+      brain-main:
+        condition: service_healthy
+      jupyter-dev:
+        condition: service_healthy
+      streamlit-dashboard:
+        condition: service_healthy
+
+    networks:
+      - brain-network
+
+  # 监控服务 (可选)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: brain-prometheus
+    restart: unless-stopped
+
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1'
+
+    # 端口
+    ports:
+      - "9090:9090"
+
+    # 配置
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+    networks:
+      - brain-network
+
+    # 启动参数
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+# 网络配置
+networks:
+  brain-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+
+# 数据卷
+volumes:
+  prometheus-data:
+    driver: local

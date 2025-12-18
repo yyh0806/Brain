@@ -29,6 +29,15 @@ try:
 except ImportError:
     logger.warning("命令队列系统不可用，将使用直接发布模式")
     COMMAND_QUEUE_AVAILABLE = False
+    # 提供fallback定义
+    class CommandPriority(Enum):
+        NORMAL = "normal"
+        HIGH = "high"
+        LOW = "low"
+
+    class CommandType(Enum):
+        TWIST = "twist"
+        STOP = "stop"
 
 # 尝试导入ROS2，如果不可用则使用模拟模式
 try:

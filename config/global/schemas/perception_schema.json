@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Perception Configuration Schema",
+  "description": "Schema for perception module configuration",
+  "type": "object",
+  "properties": {
+    "update_rate": {
+      "type": "number",
+      "minimum": 1.0,
+      "maximum": 100.0,
+      "description": "Perception update rate in Hz"
+    },
+    "sensors": {
+      "type": "object",
+      "patternProperties": {
+        "^[a-zA-Z_][a-zA-Z0-9_]*$": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether the sensor is enabled"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["camera", "depth_camera", "lidar", "gps", "imu"],
+              "description": "Sensor type"
+            },
+            "resolution": {
+              "type": "array",
+              "items": {"type": "number"},
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "Sensor resolution [width, height]"
+            },
+            "fps": {
+              "type": "number",
+              "minimum": 1.0,
+              "maximum": 120.0,
+              "description": "Frames per second"
+            },
+            "range": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1000.0,
+              "description": "Sensor range in meters"
+            },
+            "accuracy": {
+              "type": "number",
+              "minimum": 0.0,
+              "description": "Sensor accuracy"
+            }
+          },
+          "required": ["enabled", "type"],
+          "additionalProperties": true
+        }
+      }
+    },
+    "vlm": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["openai", "anthropic", "ollama", "local"]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scene_analysis_interval": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 60.0,
+          "description": "Interval between scene analyses in seconds"
+        },
+        "image_resolution": {
+          "type": "string",
+          "enum": ["original", "1/2", "1/4"],
+          "description": "Image resolution for processing"
+        }
+      },
+      "required": ["enabled"],
+      "additionalProperties": true
+    },
+    "sensor_fusion": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "algorithm": {
+          "type": "string",
+          "enum": ["ekf", "ukf", "particle"],
+          "description": "Sensor fusion algorithm"
+        },
+        "update_rate": {
+          "type": "number",
+          "minimum": 10.0,
+          "maximum": 200.0,
+          "description": "Fusion update rate in Hz"
+        }
+      },
+      "required": ["enabled"],
+      "additionalProperties": true
+    }
+  },
+  "required": ["update_rate"],
+  "additionalProperties": true
+}

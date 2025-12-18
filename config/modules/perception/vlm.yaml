@@ -1,0 +1,50 @@
+# 视觉语言模型(VLM)配置
+
+# VLM配置
+vlm:
+  enabled: true
+
+  # 模型配置
+  provider: "ollama"
+  model: "llava:7b"  # 或 "minicpm-v:latest", "llava:13b"
+  ollama_host: "http://localhost:11434"
+
+  # 分析配置
+  scene_analysis_interval: 3.5  # 秒
+  image_resolution: "1/2"  # original, 1/2, 1/4
+
+  # 提示词模板
+  prompts:
+    scene_understanding: |
+      分析这张图像，描述：
+      1. 主要物体及其位置
+      2. 环境类型（室内/室外）
+      3. 障碍物和可通行区域
+      4. 潜在的导航路径
+
+    object_detection: |
+      在图像中识别和定位所有相关物体，包括：
+      1. 类别名称
+      2. 相机坐标系中的位置
+      3. 大小和方向
+      4. 与机器人的距离估计
+
+    navigation_assistance: |
+      基于当前场景，为自主导航提供指导：
+      1. 标记安全区域
+      2. 识别潜在风险
+      3. 建议最优路径
+      4. 检测特殊地标
+
+  # 缓存配置
+  cache:
+    enabled: true
+    max_size: 100  # 缓存的场景数量
+    ttl: 300  # 缓存生存时间（秒）
+
+  # 性能优化
+  optimization:
+    batch_processing: true
+    batch_size: 4
+    max_concurrent_requests: 2
+    timeout: 30  # seconds

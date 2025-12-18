@@ -597,49 +597,48 @@ class AsyncBatchedSensorManager:
         while self._running:
             try:
                 current_time = time.time()
-            time_since_last_batch = current_time - last_batch_time
+                time_since_last_batch = current_time - last_batch_time
 
-            # 检查是否应该处理批次
-            should_process = False
-            batch_data = []
+                # 检查是否应该处理批次
+                should_process = False
+                batch_data = []
 
-            async with self.buffer_lock:
-                # 检查"all"缓冲区
-                if len(self.data_buffer["all"]) >= self.batch_size:
-                    should_process = True
-                    # 取出批次数据
-                    for _ in range(min(self.batch_size, len(self.data_buffer["all"])):))
-                        batch_data.append(self.data_buffer["all"].popleft())
+                async with self.buffer_lock:
+                    # 检查"all"缓冲区
+                    if len(self.data_buffer["all"]) >= self.batch_size:
+                        should_process = True
+                        # 取出批次数据
+                        for _ in range(min(self.batch_size, len(self.data_buffer["all"]))):
+                            batch_data.append(self.data_buffer["all"].popleft())
 
-                elif time_since_last_batch >= self.batch_timeout:
-                    should_process = True
-                    # 取出所有数据
-                    while self.data_buffer["all"]:
-                        batch_data.append(self.data_buffer["all"].popleft())
+                    elif time_since_last_batch >= self.batch_timeout:
+                        should_process = True
+                        # 取出所有数据
+                        while self.data_buffer["all"]:
+                            batch_data.append(self.data_buffer["all"].popleft())
 
-            if should_process and batch_data:
-                # 处理批次数据
-                start_time = time.time()
-                await self._process_batch(batch_data)
-                processing_time = time.time() - start_time
+                if should_process and batch_data:
+                    # 处理批次数据
+                    start_time = time.time()
+                    await self._process_batch(batch_data)
+                    processing_time = time.time() - start_time
 
-                # 更新批处理效率
-                batch_size = len(batch_data)
-                if batch_size > 0:
-                    efficiency = min(1.0, (self.batch_size / batch_size) * (self.batch_timeout / processing_time))
-                    self.metrics["batch_efficiency"] = (
-                        (self.metrics["batch_efficiency"] * 0.7 + efficiency * 0.3)
-                    )
+                    # 更新批处理效率
+                    batch_size = len(batch_data)
+                    if batch_size > 0:
+                        efficiency = min(1.0, (self.batch_size / batch_size) * (self.batch_timeout / processing_time))
+                        self.metrics["batch_efficiency"] = (
+                            (self.metrics["batch_efficiency"] * 0.7 + efficiency * 0.3)
+                        )
 
-                last_batch_time = current_time
-                logger.debug(f"处理批次: {batch_size} 项, 耗时: {processing_time:.3f}s")
+                    last_batch_time = current_time
+                    logger.debug(f"处理批次: {batch_size} 项, 耗时: {processing_time:.3f}s")
+                else:
+                    await asyncio.sleep(0.01)  # 短暂休眠
 
-            else:
-                await asyncio.sleep(0.01)  # 短暂休眠
-
-        except Exception as e:
-            logger.error(f"批处理循环异常: {e}")
-            await asyncio.sleep(0.1)
+            except Exception as e:
+                logger.error(f"批处理循环异常: {e}")
+                await asyncio.sleep(0.1)
 
     async def _process_batch(self, batch_data: List[SensorData]):
         """处理批次数据"""
@@ -765,14 +764,13 @@ class AsyncBatchedSensorManager:
 
     def get_buffer_stats(self) -> Dict[str, Any]:
         """获取缓冲区统计"""
-        async with self.buffer_lock:
-            return {
-                sensor_id: {
-                    "size": len(buffer),
-                    "max_size": buffer.maxlen
-                }
-                for sensor_id, buffer in self.data_buffer.items()
+        return {
+            sensor_id: {
+                "size": len(buffer),
+                "max_size": buffer.maxlen
             }
+            for sensor_id, buffer in self.data_buffer.items()
+        }
 
     async def clear_buffers(self):
         """清空所有缓冲区"""
@@ -806,205 +804,3 @@ class SensorManager(AsyncBatchedSensorManager):
     向后兼容的传感器管理器
     """
     pass  # 继承自AsyncBatchedSensorManager
-        
-        for sensor_name, sensor_cfg in sensors_config.items():
-            if not sensor_cfg.get("enabled", True):
-                continue
-                
-            try:
-                sensor_type = SensorType(sensor_name)
-                sensor_class = self.SENSOR_CLASSES.get(sensor_type)
-                
-                if sensor_class:
-                    config = SensorConfig(
-                        sensor_type=sensor_type,
-                        enabled=True,
-                        parameters=sensor_cfg
-                    )
-                    
-                    sensor = sensor_class(
-                        sensor_id=f"{sensor_name}_0",
-                        config=config
-                    )
-                    
-                    if await sensor.initialize():
-                        self.sensors[sensor.sensor_id] = sensor
-                        logger.info(f"传感器 {sensor.sensor_id} 注册成功")
-                    else:
-                        logger.warning(f"传感器 {sensor_name} 初始化失败")
-                        
-            except ValueError:
-                logger.warning(f"未知传感器类型: {sensor_name}")
-    
-    def register_sensor(self, sensor: BaseSensor):
-        """注册传感器"""
-        self.sensors[sensor.sensor_id] = sensor
-        logger.info(f"传感器 {sensor.sensor_id} 已注册")
-    
-    def unregister_sensor(self, sensor_id: str):
-        """注销传感器"""
-        if sensor_id in self.sensors:
-            del self.sensors[sensor_id]
-            logger.info(f"传感器 {sensor_id} 已注销")
-    
-    async def start_collection(self):
-        """开始数据采集"""
-        if self._running:
-            return
-            
-        self._running = True
-        
-        for sensor_id, sensor in self.sensors.items():
-            if sensor.config.enabled:
-                task = asyncio.create_task(
-                    self._collection_loop(sensor)
-                )
-                self._collection_tasks[sensor_id] = task
-        
-        logger.info("数据采集已启动")
-    
-    async def stop_collection(self):
-        """停止数据采集"""
-        self._running = False
-        
-        for task in self._collection_tasks.values():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-        
-        self._collection_tasks.clear()
-        logger.info("数据采集已停止")
-    
-    async def _collection_loop(self, sensor: BaseSensor):
-        """单个传感器的采集循环"""
-        interval = 1.0 / sensor.config.update_rate
-        
-        while self._running:
-            try:
-                data = await sensor.read()
-                
-                if data:
-                    self.latest_data[sensor.sensor_id] = data
-                    
-                    # 触发回调
-                    for callback in self.data_callbacks:
-                        try:
-                            callback(data)
-                        except Exception as e:
-                            logger.error(f"数据回调执行失败: {e}")
-                            
-            except Exception as e:
-                logger.error(f"传感器 {sensor.sensor_id} 采集异常: {e}")
-            
-            await asyncio.sleep(interval)
-    
-    def on_data(self, callback: Callable[[SensorData], None]):
-        """注册数据回调"""
-        self.data_callbacks.append(callback)
-    
-    async def get_current_data(self) -> Dict[str, Any]:
-        """获取当前所有传感器数据"""
-        result = {}
-        
-        for sensor_id, data in self.latest_data.items():
-            result[sensor_id] = {
-                "type": data.sensor_type.value,
-                "timestamp": data.timestamp.isoformat(),
-                "data": data.data,
-                "quality": data.quality
-            }
-        
-        return result
-    
-    async def get_sensor_data(
-        self, 
-        sensor_type: SensorType
-    ) -> Optional[SensorData]:
-        """获取指定类型传感器的数据"""
-        for sensor_id, data in self.latest_data.items():
-            if data.sensor_type == sensor_type:
-                return data
-        return None
-    
-    def get_sensor_status(self) -> Dict[str, Any]:
-        """获取所有传感器状态"""
-        return {
-            sensor_id: sensor.get_status()
-            for sensor_id, sensor in self.sensors.items()
-        }
-    
-    async def shutdown(self):
-        """关闭所有传感器"""
-        await self.stop_collection()
-        
-        for sensor in self.sensors.values():
-            await sensor.shutdown()
-        
-        self.sensors.clear()
-        logger.info("SensorManager 已关闭")
-
-
-@dataclass
-class FusedSensorData:
-    """融合后的传感器数据"""
-    timestamp: datetime
-    position: Dict[str, float]  # lat, lon, alt
-    velocity: Dict[str, float]  # vx, vy, vz
-    orientation: Dict[str, float]  # roll, pitch, yaw
-    obstacles: List[Dict[str, Any]]
-    confidence: float = 1.0
-
-
-class SensorFusion:
-    """
-    传感器数据融合
-    
-    融合多个传感器的数据，提供更准确的状态估计
-    """
-    
-    def __init__(self, sensor_manager: SensorManager):
-        self.sensor_manager = sensor_manager
-        
-    async def fuse(self) -> FusedSensorData:
-        """执行数据融合"""
-        all_data = await self.sensor_manager.get_current_data()
-        
-        # GPS位置
-        gps_data = None
-        for sid, data in all_data.items():
-            if data["type"] == "gps":
-                gps_data = data["data"]
-                break
-        
-        position = {
-            "lat": gps_data.get("latitude", 0.0) if gps_data else 0.0,
-            "lon": gps_data.get("longitude", 0.0) if gps_data else 0.0,
-            "alt": gps_data.get("altitude", 0.0) if gps_data else 0.0
-        }
-        
-        # IMU姿态
-        imu_data = None
-        for sid, data in all_data.items():
-            if data["type"] == "imu":
-                imu_data = data["data"]
-                break
-        
-        orientation = imu_data.get("orientation", {}) if imu_data else {}
-        
-        # 速度估计 (简化)
-        velocity = {"vx": 0.0, "vy": 0.0, "vz": 0.0}
-        
-        # 障碍物检测 (来自激光雷达)
-        obstacles = []
-        
-        return FusedSensorData(
-            timestamp=datetime.now(),
-            position=position,
-            velocity=velocity,
-            orientation=orientation,
-            obstacles=obstacles,
-            confidence=0.9
-        )
-

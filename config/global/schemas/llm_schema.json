@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LLM Configuration Schema",
+  "description": "Schema for LLM configuration validation",
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": ["openai", "anthropic", "ollama", "local", "azure", "custom"],
+      "description": "LLM provider"
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Model name"
+    },
+    "api_base": {
+      "type": "string",
+      "format": "uri",
+      "description": "API base URL"
+    },
+    "api_key": {
+      "type": "string",
+      "description": "API key (should be loaded from environment)"
+    },
+    "max_tokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 128000,
+      "description": "Maximum number of tokens in response"
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 2.0,
+      "description": "Sampling temperature"
+    },
+    "top_p": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Nucleus sampling parameter"
+    },
+    "timeout": {
+      "type": "number",
+      "minimum": 1.0,
+      "maximum": 600.0,
+      "description": "Request timeout in seconds"
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 10,
+      "description": "Number of retry attempts"
+    },
+    "retry_delay": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 60.0,
+      "description": "Delay between retries in seconds"
+    }
+  },
+  "required": ["provider", "model"],
+  "additionalProperties": true
+}

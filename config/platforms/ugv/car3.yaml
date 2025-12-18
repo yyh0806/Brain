@@ -1,0 +1,155 @@
+# Car3 UGV配置
+
+# 平台基本信息
+platform:
+  name: "Car3"
+  type: "ugv"
+  subtype: "ackermann"  # ackermann, differential
+
+  # 物理参数
+  dimensions:
+    length: 0.5  # meters
+    width: 0.3   # meters
+    height: 0.2  # meters
+    wheelbase: 0.3  # meters
+    track_width: 0.25  # meters
+    ground_clearance: 0.05  # meters
+
+  # 质量参数
+  mass: 15.0  # kg
+  max_payload: 5.0  # kg
+
+# 运动学配置
+kinematics:
+  # 速度限制
+  max_linear_speed: 1.0    # m/s
+  max_angular_speed: 1.0   # rad/s
+  max_acceleration: 0.5    # m/s²
+  max_angular_acceleration: 1.0  # rad/s²
+
+  # 转向限制（Ackermann）
+  max_steering_angle: 0.5  # rad
+  min_turning_radius: 0.5  # meters
+
+  # 轮子参数
+  wheel_radius: 0.05  # meters
+  wheel_diameter: 0.1  # meters
+
+# 动力系统
+power:
+  # 电池配置
+  battery:
+    voltage: 12.0  # V
+    capacity: 10.0  # Ah
+    type: "LiPo"
+
+  # 功耗配置
+  power_consumption:
+    idle: 5.0      # W
+    moving: 20.0   # W
+    max_load: 40.0 # W
+
+  # 电量阈值
+  battery_thresholds:
+    warning: 20    # percent
+    critical: 10   # percent
+    shutdown: 5    # percent
+
+# 传感器配置
+sensors:
+  # 相机
+  camera:
+    type: "rgb_d"
+    position: [0.1, 0.0, 0.15]
+    orientation: [0.0, 0.0, 0.0]
+    fov: 90  # degrees
+    resolution: [640, 480]
+    fps: 30
+
+  # 激光雷达
+  lidar:
+    type: "2d"
+    position: [0.0, 0.0, 0.2]
+    orientation: [0.0, 0.0, 0.0]
+    range: 10.0  # meters
+    fov: 360    # degrees
+    resolution: 0.25  # degrees
+    scan_rate: 10  # Hz
+
+  # IMU
+  imu:
+    position: [0.0, 0.0, 0.1]
+    orientation: [0.0, 0.0, 0.0]
+    accel_range: 16  # g
+    gyro_range: 2000  # deg/s
+    update_rate: 100  # Hz
+
+  # 编码器
+  encoders:
+    type: "quadrature"
+    resolution: 1000  # ticks per revolution
+    wheels: ["front_left", "front_right", "rear_left", "rear_right"]
+
+# 控制配置
+control:
+  # PID参数
+  pid:
+    linear:
+      kp: 1.0
+      ki: 0.0
+      kd: 0.1
+      max_integral: 1.0
+
+    angular:
+      kp: 1.0
+      ki: 0.0
+      kd: 0.1
+      max_integral: 1.0
+
+  # 控制频率
+  control_rate: 50  # Hz
+
+  # 安全配置
+  safety:
+    emergency_stop_distance: 0.3  # meters
+    obstacle_detection_range: 2.0  # meters
+    collision_recovery_enabled: true
+
+# 导航配置
+navigation:
+  # 局部规划
+  local_planner:
+    type: "dwa"  # dwa, teb
+    max_vel_x: 1.0
+    max_vel_theta: 1.0
+    acc_lim_x: 0.5
+    acc_lim_theta: 1.0
+    sim_time: 1.0
+    sim_granularity: 0.025
+
+  # 全局规划
+  global_planner:
+    type: "astar"  # astar, dijkstra, rrt
+    resolution: 0.05  # meters
+    neutral_cost: 50.0
+    cost_factor: 0.55
+
+  # 路径跟踪
+  path_following:
+    lookahead_distance: 0.5  # meters
+    goal_tolerance: 0.2      # meters
+    rotation_tolerance: 0.1  # rad
+
+# ROS2配置
+ros2:
+  # 节点名称
+  node_name: "car3_brain"
+
+  # 话题映射
+  topic_mapping:
+    cmd_vel: "/car3/twist"
+    rgb_image: "/car3/rgbImage"
+    depth_image: "/car3/depthImage"
+    laser_scan: "/scan"
+    pointcloud: "/car3/lidar_points"
+    odom: "/car3/car_info"
