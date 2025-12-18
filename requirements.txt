@@ -5,7 +5,7 @@
 pydantic>=2.5.0
 python-dotenv>=1.0.0
 pyyaml>=6.0.1
-asyncio-compat>=0.1.0
+# asyncio-compat>=0.1.0  # 已移除，此包不存在
 
 # LLM接口
 openai>=1.3.0
@@ -71,4 +71,26 @@ mypy>=1.7.0
 # sensor_msgs
 # nav_msgs
 # cv_bridge
+
+# Isaac Sim仿真环境 (需要NVIDIA GPU和兼容环境)
+# isaacsim>=4.0.0  # Isaac Sim核心包，需要NVIDIA GPU支持
+# 注意：isaacsim需要以下系统要求：
+# - Python 3.10 (Isaac Sim 4.x) 或 Python 3.11 (Isaac Sim 5.x)
+# - NVIDIA GPU with VOLTA架构或更新版本
+# - 4GB+ VRAM
+# - GLIBC 2.35+
+# 安装前请运行: ldd --version 检查GLIBC版本
+
+# Isaac Sim扩展和工具
+# isaaclab  # Isaac Lab框架，提供更高级的机器人仿真接口
+# omni.kit.primitive.core  # 3D基础图元
+# omni.kit.loop-isaac  # Isaac仿真循环
+
+# 可选的Isaac Sim依赖
+# carb  # Carbonite框架
+# usd-core  # Universal Scene Description支持
+# pybind11  # Python C++绑定
+
+# 替代仿真环境 (如果Isaac Sim环境不满足要求)
+# pybullet  # 轻量级物理仿真，作为备选方案
 
