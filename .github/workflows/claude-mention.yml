@@ -32,14 +32,18 @@ jobs:
       id: parse-command
       run: |
         # 获取评论或Issue内容
-        if [ "${{ github.event.comment }}" != "" ]; then
+        if [ "${{ github.event.comment.body }}" != "" ]; then
           CONTENT="${{ github.event.comment.body }}"
           CONTEXT_TYPE="comment"
           ISSUE_NUMBER="${{ github.event.issue.number }}"
-        else
+        elif [ "${{ github.event.issue.body }}" != "" ]; then
           CONTENT="${{ github.event.issue.body }}"
           CONTEXT_TYPE="issue"
           ISSUE_NUMBER="${{ github.event.issue.number }}"
+        else
+          # 如果都没有，可能是PR触发但没有评论
+          echo "No content found, exiting..."
+          exit 0
         fi
 
         echo "content=$CONTENT" >> $GITHUB_OUTPUT
