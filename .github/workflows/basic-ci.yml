@@ -1,4 +1,4 @@
-name: Basic CI
+name: CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 jobs:
   CI:
     runs-on: ubuntu-latest
-    name: CI Check
+    name: CI
 
     steps:
     - name: Checkout code
@@ -24,7 +24,7 @@ jobs:
 
   code-quality:
     runs-on: ubuntu-latest
-    name: Code Quality Check
+    name: code-quality
 
     steps:
     - name: Checkout code
@@ -40,7 +40,7 @@ jobs:
 
   security-scan:
     runs-on: ubuntu-latest
-    name: Security Scan
+    name: security-scan
 
     steps:
     - name: Checkout code
@@ -56,7 +56,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    name: Tests
+    name: test
 
     steps:
     - name: Checkout code
