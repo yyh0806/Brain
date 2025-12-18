@@ -1,0 +1,44 @@
+name: Test Claude Code Integration
+
+on:
+  workflow_dispatch:  # 手动触发用于测试
+
+jobs:
+  test-claude-code:
+    runs-on: ubuntu-latest
+    name: Test Claude Code GitHub App
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Test Claude Code functionality
+      run: |
+        echo "Testing Claude Code with API configuration..."
+        echo "ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}"
+        echo "ANTHROPIC_API_KEY is configured: ${{ secrets.ANTHROPIC_API_KEY != '' }}"
+
+        # 测试基本Claude Code命令
+        if command -v claude >/dev/null 2>&1; then
+          echo "✅ Claude Code CLI is available"
+        else
+          echo "❌ Claude Code CLI not found - installing..."
+          npm install -g @anthropic-ai/claude-code
+        fi
+
+    - name: Test API connection
+      env:
+        ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        echo "Testing API connection to $ANTHROPIC_BASE_URL..."
+
+        curl -X POST "$ANTHROPIC_BASE_URL/v1/messages" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
+          -H "anthropic-version: 2023-06-01" \
+          -d '{
+            "model": "claude-3-sonnet-20240229",
+            "max_tokens": 20,
+            "messages": [{"role": "user", "content": "Hello from GitHub Actions!"}]
+          }' || echo "API test failed"
