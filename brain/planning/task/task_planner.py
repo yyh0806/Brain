@@ -30,7 +30,7 @@ from brain.state.world_state import WorldState
 
 if TYPE_CHECKING:
     from brain.cognitive.world_model import PlanningContext
-    from brain.cognitive.cot_engine import ReasoningResult
+    from brain.cognitive.reasoning.cot_engine import ReasoningResult
 
 
 class PlannerStrategy(Enum):

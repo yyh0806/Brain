@@ -21,7 +21,7 @@ from loguru import logger
 from brain.planning.task.task_planner import TaskPlanner
 from brain.execution.executor import Executor
 from brain.core.monitor import SystemMonitor
-from brain.perception.sensors.sensor_manager import SensorManager
+from brain.perception.sensors.sensor_manager import MultiSensorManager as SensorManager
 # EnvironmentModel 已删除，功能合并到 WorldModel
 from brain.models.llm_interface import LLMInterface
 from brain.models.task_parser import TaskParser
@@ -34,11 +34,12 @@ from brain.state.checkpoint import CheckpointManager
 from brain.communication.robot_interface import RobotInterface
 from brain.utils.config import ConfigManager
 
-# 认知模块
-from brain.cognitive.world_model.world_model import WorldModel, EnvironmentChange
-from brain.cognitive.dialogue.dialogue_manager import DialogueManager, DialogueContext, DialogueType
-from brain.cognitive.reasoning.cot_engine import CoTEngine, ReasoningResult, ReasoningMode
-from brain.cognitive.monitoring.perception_monitor import PerceptionMonitor, MonitorEvent, TriggerAction
+# 认知模块 - 使用统一接口
+from brain.cognitive.interface import CognitiveLayer
+from brain.cognitive.world_model import WorldModel, EnvironmentChange, ChangeType
+from brain.cognitive.dialogue import DialogueManager, DialogueContext, DialogueType
+from brain.cognitive.reasoning import CoTEngine, ReasoningResult, ReasoningMode
+from brain.cognitive.monitoring import PerceptionMonitor, MonitorEvent, TriggerAction
 from brain.models.cot_prompts import CoTPrompts
 
 
@@ -193,7 +194,16 @@ class Brain:
         self.perception_monitor.set_confirmation_callback(self._on_confirmation_required)
         self.perception_monitor.set_notification_callback(self._on_notification)
         
-        logger.info("认知模块初始化完成")
+        # 创建认知层统一接口
+        self.cognitive_layer = CognitiveLayer(
+            world_model=self.cognitive_world_model,
+            cot_engine=self.cot_engine,
+            dialogue_manager=self.dialogue,
+            perception_monitor=self.perception_monitor,
+            config=self.config.get("cognitive", {})
+        )
+        
+        logger.info("认知模块初始化完成（使用统一接口）")
     
     def set_user_callback(self, callback: Callable[[str, List[str]], Awaitable[str]]):
         """设置用户交互回调"""

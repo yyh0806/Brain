@@ -12,11 +12,24 @@
 from typing import Dict, List, Any, Optional, Tuple, Set, Union
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import Enum
 from copy import deepcopy
 import math
 import numpy as np
 from loguru import logger
+
+# 导入类型定义
+from brain.cognitive.world_model.environment_change import (
+    ChangeType,
+    ChangePriority,
+    EnvironmentChange
+)
+from brain.cognitive.world_model.planning_context import PlanningContext
+from brain.cognitive.world_model.object_tracking.tracked_object import TrackedObject
+from brain.cognitive.world_model.semantic.semantic_object import (
+    ObjectState,
+    SemanticObject,
+    ExplorationFrontier
+)
 
 # 导入资源管理器
 try:
@@ -44,226 +57,19 @@ except ImportError:
     PERCEPTION_DATA_AVAILABLE = False
     PerceptionData = None
 
-
-class ChangeType(Enum):
-    """环境变化类型"""
-    NEW_OBSTACLE = "new_obstacle"           # 新障碍物出现
-    OBSTACLE_MOVED = "obstacle_moved"       # 障碍物移动
-    OBSTACLE_REMOVED = "obstacle_removed"   # 障碍物消失
-    TARGET_APPEARED = "target_appeared"     # 目标出现
-    TARGET_MOVED = "target_moved"           # 目标移动
-    TARGET_LOST = "target_lost"             # 目标丢失
-    PATH_BLOCKED = "path_blocked"           # 路径被阻塞
-    PATH_CLEARED = "path_cleared"           # 路径畅通
-    WEATHER_CHANGED = "weather_changed"     # 天气变化
-    BATTERY_LOW = "battery_low"             # 电池电量低
-    SIGNAL_DEGRADED = "signal_degraded"     # 信号降级
-    NEW_POI = "new_poi"                     # 新兴趣点
-    GEOFENCE_APPROACH = "geofence_approach" # 接近地理围栏
-
-
-class ChangePriority(Enum):
-    """变化优先级"""
-    CRITICAL = "critical"   # 必须立即处理
-    HIGH = "high"           # 高优先级
-    MEDIUM = "medium"       # 中等优先级
-    LOW = "low"             # 低优先级
-    INFO = "info"           # 仅信息
-
-
-@dataclass
-class EnvironmentChange:
-    """环境变化记录"""
-    change_type: ChangeType
-    priority: ChangePriority
-    description: str
-    data: Dict[str, Any]
-    timestamp: datetime = field(default_factory=datetime.now)
-    confidence: float = 1.0
-    requires_replan: bool = False
-    requires_confirmation: bool = False
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "type": self.change_type.value,
-            "priority": self.priority.value,
-            "description": self.description,
-            "data": self.data,
-            "timestamp": self.timestamp.isoformat(),
-            "confidence": self.confidence,
-            "requires_replan": self.requires_replan,
-            "requires_confirmation": self.requires_confirmation
-        }
-
-
-@dataclass
-class TrackedObject:
-    """被跟踪的物体"""
-    id: str
-    object_type: str
-    position: Dict[str, float]
-    velocity: Dict[str, float] = field(default_factory=lambda: {"vx": 0, "vy": 0, "vz": 0})
-    size: Dict[str, float] = field(default_factory=lambda: {"width": 1, "height": 1, "depth": 1})
-    confidence: float = 1.0
-    first_seen: datetime = field(default_factory=datetime.now)
-    last_seen: datetime = field(default_factory=datetime.now)
-    is_obstacle: bool = False
-    is_target: bool = False
-    attributes: Dict[str, Any] = field(default_factory=dict)
-    position_history: List[Dict[str, float]] = field(default_factory=list)
-
-
-class ObjectState(Enum):
-    """物体状态（用于语义物体）"""
-    DETECTED = "detected"       # 首次检测到
-    TRACKED = "tracked"         # 持续追踪中
-    LOST = "lost"              # 丢失
-    CONFIRMED = "confirmed"     # 确认存在
-
-
-@dataclass
-class SemanticObject:
-    """语义物体（从 SemanticWorldModel 迁移）"""
-    id: str
-    label: str
-    
-    # 位置信息
-    world_position: Tuple[float, float] = (0.0, 0.0)  # 世界坐标
-    local_position: Optional[Tuple[float, float]] = None  # 相对机器人坐标
-    
-    # 边界框（相对图像）
-    bbox: Optional['BoundingBox'] = None
-    
-    # 状态
-    state: ObjectState = ObjectState.DETECTED
-    confidence: float = 0.0
-    
-    # 描述
-    description: str = ""
-    attributes: Dict[str, Any] = field(default_factory=dict)
-    
-    # 时间戳
-    first_seen: datetime = field(default_factory=datetime.now)
-    last_seen: datetime = field(default_factory=datetime.now)
-    observation_count: int = 1
-    
-    # 是否为目标
-    is_target: bool = False
-    target_type: str = ""  # 如 "destination", "landmark", "obstacle"
-    
-    def update_observation(self, confidence: float, position: Tuple[float, float] = None):
-        """更新观测"""
-        self.last_seen = datetime.now()
-        self.observation_count += 1
-        self.confidence = min(1.0, self.confidence * 0.8 + confidence * 0.2)
-        
-        if position:
-            # 平滑位置更新
-            alpha = 0.7
-            self.world_position = (
-                alpha * self.world_position[0] + (1 - alpha) * position[0],
-                alpha * self.world_position[1] + (1 - alpha) * position[1]
-            )
-        
-        if self.state == ObjectState.LOST:
-            self.state = ObjectState.TRACKED
-        elif self.observation_count >= 3:
-            self.state = ObjectState.CONFIRMED
-    
-    def mark_lost(self):
-        """标记为丢失"""
-        self.state = ObjectState.LOST
-    
-    def is_valid(self, max_age: float = 60.0) -> bool:
-        """检查是否有效"""
-        age = (datetime.now() - self.last_seen).total_seconds()
-        return age < max_age and self.state != ObjectState.LOST
-    
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "id": self.id,
-            "label": self.label,
-            "world_position": self.world_position,
-            "state": self.state.value,
-            "confidence": self.confidence,
-            "description": self.description,
-            "is_target": self.is_target
-        }
-
-
-@dataclass
-class ExplorationFrontier:
-    """探索边界（从 SemanticWorldModel 迁移）"""
-    id: str
-    position: Tuple[float, float]  # 边界位置
-    direction: float  # 方向（弧度）
-    
-    # 探索优先级
-    priority: float = 0.5
-    
-    # 状态
-    explored: bool = False
-    reachable: bool = True
-    
-    # 探索收益预估
-    expected_info_gain: float = 0.5
-    
-    timestamp: datetime = field(default_factory=datetime.now)
-
-
-@dataclass
-class PlanningContext:
-    """规划上下文 - 提供给规划器的环境信息"""
-    current_position: Dict[str, float]
-    current_heading: float
-    obstacles: List[Dict[str, Any]]
-    targets: List[Dict[str, Any]]
-    points_of_interest: List[Dict[str, Any]]
-    weather: Dict[str, Any]
-    battery_level: float
-    signal_strength: float
-    available_paths: List[Dict[str, Any]]
-    constraints: List[str]
-    recent_changes: List[Dict[str, Any]]
-    risk_areas: List[Dict[str, Any]]
-    
-    def to_prompt_context(self) -> str:
-        """转换为LLM可理解的上下文描述"""
-        lines = []
-        
-        lines.append("## 当前状态")
-        lines.append(f"- 位置: ({self.current_position.get('x', 0):.1f}, {self.current_position.get('y', 0):.1f}, {self.current_position.get('z', 0):.1f})")
-        lines.append(f"- 航向: {self.current_heading:.1f}°")
-        lines.append(f"- 电池: {self.battery_level:.1f}%")
-        lines.append(f"- 信号: {self.signal_strength:.1f}%")
-        
-        if self.obstacles:
-            lines.append(f"\n## 障碍物 ({len(self.obstacles)}个)")
-            for obs in self.obstacles[:5]:  # 最多显示5个
-                lines.append(f"- {obs.get('type', '未知')}: 距离{obs.get('distance', 0):.1f}m, 方向{obs.get('direction', '未知')}")
-        
-        if self.targets:
-            lines.append(f"\n## 目标 ({len(self.targets)}个)")
-            for target in self.targets[:5]:
-                lines.append(f"- {target.get('type', '未知')}: 距离{target.get('distance', 0):.1f}m")
-        
-        if self.recent_changes:
-            lines.append(f"\n## 最近变化")
-            for change in self.recent_changes[:3]:
-                lines.append(f"- [{change.get('priority', 'info')}] {change.get('description', '未知变化')}")
-        
-        if self.constraints:
-            lines.append(f"\n## 约束条件")
-            for constraint in self.constraints:
-                lines.append(f"- {constraint}")
-        
-        if self.weather.get("condition") != "clear":
-            lines.append(f"\n## 天气")
-            lines.append(f"- 状况: {self.weather.get('condition', '未知')}")
-            lines.append(f"- 风速: {self.weather.get('wind_speed', 0):.1f}m/s")
-            lines.append(f"- 能见度: {self.weather.get('visibility', '良好')}")
-        
-        return "\n".join(lines)
+# 导入信念修正策略
+try:
+    from brain.cognitive.world_model.belief_revision import (
+        BeliefRevisionPolicy, BeliefType, OperationType, BeliefEntry
+    )
+    BELIEF_REVISION_AVAILABLE = True
+except ImportError:
+    BELIEF_REVISION_AVAILABLE = False
+    logger.warning("信念修正模块不可用")
+    BeliefRevisionPolicy = None
+    BeliefType = None
+    OperationType = None
+    BeliefEntry = None
 
 
 class WorldModel:
@@ -407,6 +213,24 @@ class WorldModel:
         # 内存管理配置
         self.enable_memory_management = self.config.get("enable_memory_management", True)
         self.cleanup_threshold = self.config.get("cleanup_threshold", 0.8)  # 80%内存使用率触发清理
+
+        # 信念修正策略（Belief Revision Policy）
+        self.belief_revision_policy = None
+        if BELIEF_REVISION_AVAILABLE:
+            belief_config = self.config.get("belief_revision", {})
+            # 尝试从配置文件加载
+            try:
+                from brain.utils.config import load_config
+                cognitive_config = load_config("modules/cognitive/belief_revision.yaml")
+                if cognitive_config and "belief_revision" in cognitive_config:
+                    belief_config.update(cognitive_config["belief_revision"])
+            except Exception as e:
+                logger.debug(f"无法加载信念修正配置文件: {e}")
+            
+            self.belief_revision_policy = BeliefRevisionPolicy(config=belief_config)
+            logger.info("信念修正策略已启用")
+        else:
+            logger.warning("信念修正策略不可用")
 
         logger.info("WorldModel 初始化完成 (支持资源管理)" if RESOURCE_MANAGER_AVAILABLE else "WorldModel 初始化完成")
     

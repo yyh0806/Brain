@@ -1,4 +1,20 @@
 # -*- coding: utf-8 -*-
-from brain.cognitive.dialogue.dialogue_manager import DialogueManager, DialogueContext, DialogueType
+"""
+对话模块 - Dialogue Module
+"""
 
-__all__ = ["DialogueManager", "DialogueContext", "DialogueType"]
+from brain.cognitive.dialogue.dialogue_manager import (
+    DialogueManager,
+    DialogueContext,
+    DialogueType,
+    DialogueState,
+    DialogueMessage
+)
+
+__all__ = [
+    "DialogueManager",
+    "DialogueContext",
+    "DialogueType",
+    "DialogueState",
+    "DialogueMessage",
+]
