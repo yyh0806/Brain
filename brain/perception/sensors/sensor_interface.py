@@ -18,7 +18,7 @@ import queue
 import numpy as np
 import logging
 
-from .sensor_input_types import (
+from brain.perception.sensor_input_types import (
     SensorDataPacket,
     SensorType,
     PointCloudData,
