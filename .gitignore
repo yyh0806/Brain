@@ -48,3 +48,34 @@ examples/data/processed/
 # 临时文件
 temp/
 tmp/
+
+# Isaac Sim 相关文件
+*isaac*
+*Isaac*
+ISAAC*
+isaac_sim*
+enable_isaac_web.py
+isaac_sim_backup.html
+isaac_sim_solutions.py
+ISaac_Sim_Ultra_Solution_Guide.md
+Isaac_Sim_Connection_Reset_Solution.md
+launch_isaac_gui.py
+start_isaac_gui_complete.sh
+
+# 根目录下的脚本文件（保留scripts/目录内的脚本）
+*.sh
+
+# 测试和开发工具文件
+tools/development/*.py
+!tools/development/README.md
+testing_framework_dev
+
+# 日志文件
+*.log
+logs/
+
+# 数据和输出文件
+*.html
+*.json
+!config/**/*.json
+!data/**/*.json
