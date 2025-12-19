@@ -133,13 +133,14 @@ class PlanState:
         """
         检查是否可以安全回滚节点
         
-        Phase 2实现：检查commit_level
+        Phase 1: 基础实现
+        Phase 2: 检查commit_level
         """
         node = self.get_node(node_id)
         if not node:
             return False
         
-        # Phase 0: 简单实现，所有节点都可以回滚
+        # Phase 1: 简单实现，所有节点都可以回滚
         # Phase 2: 检查commit_level == SOFT
         return True
     
@@ -153,9 +154,32 @@ class PlanState:
         if not failed_node:
             return []
         
-        # Phase 0: 简单实现，只返回失败节点
-        # Phase 2: 实现完整的回滚逻辑，考虑commit_level
-        return [failed_node]
+        # Phase 1: 返回失败节点及其所有后代
+        rollback_nodes = [failed_node]
+        rollback_nodes.extend(failed_node.get_all_descendants())
+        
+        return rollback_nodes
+    
+    def get_nodes_for_replanning(self, failed_node_id: str) -> List[PlanNode]:
+        """
+        获取需要重规划的节点列表
+        
+        从失败节点开始，向上查找，直到找到可以局部重算的节点
+        """
+        failed_node = self.get_node(failed_node_id)
+        if not failed_node:
+            return []
+        
+        # Phase 1: 简单实现，返回失败节点及其父节点
+        nodes = [failed_node]
+        
+        # 向上查找父节点
+        current = failed_node
+        while current.parent:
+            nodes.append(current.parent)
+            current = current.parent
+        
+        return nodes
     
     def clone(self) -> 'PlanState':
         """克隆PlanState（用于重规划）"""
