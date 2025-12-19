@@ -1,0 +1,21 @@
+# 信念修正策略配置
+# Belief Revision Policy Configuration
+
+belief_revision:
+  # 失败惩罚
+  failure_penalty: 0.2  # 每次失败降低的置信度
+  max_failures_before_remove: 3  # 失败次数阈值，超过此值建议移除
+  removal_threshold: 0.1  # 置信度低于此值时移除
+  
+  # 成功奖励
+  success_boost: 0.1  # 每次成功提高的置信度
+  max_confidence: 0.95  # 最大置信度上限
+  
+  # 时间衰减
+  decay_rate: 0.01  # 每秒衰减的置信度
+  decay_interval: 60.0  # 衰减检查间隔（秒）
+  min_confidence: 0.05  # 最小置信度下限
+  
+  # 观测更新
+  observation_boost: 0.15  # 新观测提高的置信度
+  observation_decay_time: 300.0  # 观测失效时间（秒），超过此时间未观测则开始衰减
