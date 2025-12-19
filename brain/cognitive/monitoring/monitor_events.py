@@ -64,3 +64,4 @@ class MonitorEvent:
     timestamp: datetime = field(default_factory=datetime.now)
     handled: bool = False
     handler_result: Optional[Dict[str, Any]] = None
+

@@ -10,19 +10,13 @@
 """
 
 from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import Enum
 import json
 import re
 import hashlib
 from loguru import logger
-
-# 导入类型定义
-from brain.cognitive.reasoning.reasoning_result import (
-    ReasoningMode,
-    ComplexityLevel,
-    ReasoningStep,
-    ReasoningResult
-)
 
 # 导入缓存管理器
 try:
@@ -31,6 +25,88 @@ try:
 except ImportError:
     logger.warning("缓存管理器不可用，推理引擎将运行在无缓存模式")
     CACHE_AVAILABLE = False
+
+
+class ReasoningMode(Enum):
+    """推理模式"""
+    PLANNING = "planning"               # 任务规划
+    REPLANNING = "replanning"           # 重新规划
+    EXCEPTION_HANDLING = "exception"    # 异常处理
+    CLARIFICATION = "clarification"     # 指令澄清
+    DECISION = "decision"               # 决策判断
+
+
+class ComplexityLevel(Enum):
+    """复杂度等级"""
+    SIMPLE = "simple"       # 简单，直接执行
+    MODERATE = "moderate"   # 中等，简单推理
+    COMPLEX = "complex"     # 复杂，完整CoT
+    CRITICAL = "critical"   # 关键，深度推理+验证
+
+
+@dataclass
+class ReasoningStep:
+    """推理步骤"""
+    step_number: int
+    question: str
+    analysis: str
+    conclusion: str
+    confidence: float = 1.0
+    evidence: List[str] = field(default_factory=list)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "step": self.step_number,
+            "question": self.question,
+            "analysis": self.analysis,
+            "conclusion": self.conclusion,
+            "confidence": self.confidence,
+            "evidence": self.evidence
+        }
+    
+    def __str__(self) -> str:
+        return f"步骤{self.step_number}: {self.question}\n分析: {self.analysis}\n结论: {self.conclusion}"
+
+
+@dataclass
+class ReasoningResult:
+    """推理结果"""
+    mode: ReasoningMode
+    query: str
+    context_summary: str
+    complexity: ComplexityLevel
+    chain: List[ReasoningStep]
+    decision: str
+    suggestion: str
+    confidence: float
+    raw_response: str
+    timestamp: datetime = field(default_factory=datetime.now)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "mode": self.mode.value,
+            "query": self.query,
+            "complexity": self.complexity.value,
+            "chain": [step.to_dict() for step in self.chain],
+            "decision": self.decision,
+            "suggestion": self.suggestion,
+            "confidence": self.confidence,
+            "timestamp": self.timestamp.isoformat()
+        }
+    
+    def get_chain_summary(self) -> str:
+        """获取推理链摘要"""
+        if not self.chain:
+            return "无推理步骤"
+        
+        lines = ["推理过程:"]
+        for step in self.chain:
+            lines.append(f"  {step.step_number}. {step.question}")
+            lines.append(f"     → {step.conclusion}")
+        lines.append(f"\n最终决策: {self.decision}")
+        
+        return "\n".join(lines)
 
 
 class CoTEngine:

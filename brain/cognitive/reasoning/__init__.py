@@ -3,8 +3,8 @@
 推理模块 - Reasoning Module
 """
 
-from brain.cognitive.reasoning.cot_engine import CoTEngine
-from brain.cognitive.reasoning.reasoning_result import (
+from brain.cognitive.reasoning.cot_engine import (
+    CoTEngine,
     ReasoningMode,
     ComplexityLevel,
     ReasoningStep,
@@ -18,3 +18,4 @@ __all__ = [
     "ReasoningStep",
     "ReasoningResult",
 ]
+

@@ -9,18 +9,57 @@
 """
 
 from typing import Dict, List, Any, Optional, Callable, Awaitable, Set
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from enum import Enum
 import asyncio
 from loguru import logger
 
 from brain.cognitive.world_model import WorldModel, EnvironmentChange, ChangeType, ChangePriority
 
-# 导入类型定义
-from brain.cognitive.monitoring.monitor_events import (
-    TriggerAction,
-    ReplanTrigger,
-    MonitorEvent
-)
+
+class TriggerAction(Enum):
+    """触发动作"""
+    REPLAN = "replan"                     # 重新规划
+    CONFIRM_AND_REPLAN = "confirm_replan" # 确认后重规划
+    NOTIFY_ONLY = "notify"                # 仅通知
+    PAUSE = "pause"                       # 暂停执行
+    ABORT = "abort"                       # 中止任务
+    IGNORE = "ignore"                     # 忽略
+
+
+@dataclass
+class ReplanTrigger:
+    """重规划触发器"""
+    change_type: ChangeType
+    priority: ChangePriority
+    action: TriggerAction
+    threshold: float  # 触发阈值
+    cooldown: float   # 冷却时间（秒）
+    description: str
+    last_triggered: Optional[datetime] = None
+    
+    def can_trigger(self) -> bool:
+        """检查是否可以触发（考虑冷却）"""
+        if self.last_triggered is None:
+            return True
+        elapsed = (datetime.now() - self.last_triggered).total_seconds()
+        return elapsed >= self.cooldown
+    
+    def mark_triggered(self):
+        """标记已触发"""
+        self.last_triggered = datetime.now()
+
+
+@dataclass
+class MonitorEvent:
+    """监控事件"""
+    change: EnvironmentChange
+    trigger: ReplanTrigger
+    action: TriggerAction
+    timestamp: datetime = field(default_factory=datetime.now)
+    handled: bool = False
+    handler_result: Optional[Dict[str, Any]] = None
 
 
 class PerceptionMonitor:

@@ -3,77 +3,51 @@
 Brain Cognitive World Model Module
 
 This module provides the cognitive world model implementation for the Brain system,
-including sensor input processing, multi-sensor fusion, and situational awareness.
+including multi-sensor fusion, and situational awareness.
+
+Note: Sensor-related files (sensor_manager, sensor_interface, data_converter, sensor_input_types)
+have been moved to brain/perception/ as they belong to the perception layer.
 """
 
-from brain.cognitive.world_model.world_model import WorldModel, EnvironmentChange, ChangeType, ChangePriority
-
-# Sensor input types and interfaces
-from brain.cognitive.world_model.sensor_input_types import (
-    SensorDataPacket,
-    PointCloudData,
-    ImageData,
-    IMUData,
-    GPSData,
-    WeatherData,
-    CameraIntrinsics,
-    SensorType,
-    SensorQuality,
+from brain.cognitive.world_model.world_model import WorldModel
+from brain.cognitive.world_model.environment_change import (
+    EnvironmentChange,
+    ChangeType,
+    ChangePriority
 )
-
-from brain.cognitive.world_model.sensor_interface import (
-    BaseSensor,
-    PointCloudSensor,
-    ImageSensor,
-    IMUSensor,
-    GPSSensor,
+from brain.cognitive.world_model.planning_context import PlanningContext
+from brain.cognitive.world_model.object_tracking import TrackedObject
+from brain.cognitive.world_model.semantic import (
+    ObjectState,
+    SemanticObject,
+    ExplorationFrontier
 )
-
-from brain.cognitive.world_model.sensor_manager import (
-    MultiSensorManager,
-    SensorSyncStatus,
-    DataQualityAssessment,
-    SynchronizedDataPacket,
-)
-
-from brain.cognitive.world_model.data_converter import (
-    DataConverter,
-    ROS2Converter,
-    StandardFormatConverter,
+from brain.cognitive.world_model.belief import (
+    Belief,
+    BeliefUpdatePolicy
 )
 
 __all__ = [
-    # Existing world model
+    # Core world model
     "WorldModel",
+    
+    # Environment changes
     "EnvironmentChange",
     "ChangeType",
     "ChangePriority",
-
-    # Data types
-    "SensorDataPacket",
-    "PointCloudData",
-    "ImageData",
-    "IMUData",
-    "GPSData",
-    "WeatherData",
-    "CameraIntrinsics",
-    "SensorType",
-    "SensorQuality",
-
-    # Sensor interfaces
-    "BaseSensor",
-    "PointCloudSensor",
-    "ImageSensor",
-    "IMUSensor",
-    "GPSSensor",
-
-    # Management
-    "MultiSensorManager",
-    "SensorSyncStatus",
-    "DataQualityAssessment",
-
-    # Converters
-    "DataConverter",
-    "ROS2Converter",
-    "StandardFormatConverter",
+    
+    # Planning context
+    "PlanningContext",
+    
+    # Object tracking
+    "TrackedObject",
+    
+    # Semantic understanding
+    "ObjectState",
+    "SemanticObject",
+    "ExplorationFrontier",
+    
+    # Belief management
+    "Belief",
+    "BeliefUpdatePolicy",
 ]

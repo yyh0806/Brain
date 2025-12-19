@@ -241,12 +241,15 @@ class CognitiveLayer:
         if not self.world_model:
             raise ValueError("WorldModel 未初始化")
         
-        # TODO: 实现信念修正逻辑
-        # 这里需要调用 BeliefUpdatePolicy 来处理观测结果
-        # 目前先返回空结果，待 BeliefUpdatePolicy 实现后完善
+        # 获取或创建 BeliefUpdatePolicy
+        if not hasattr(self.world_model, 'belief_update_policy'):
+            from brain.cognitive.world_model.belief.belief_update_policy import BeliefUpdatePolicy
+            self.world_model.belief_update_policy = BeliefUpdatePolicy(
+                config=self.config.get("belief_update", {})
+            )
         
-        logger.warning("BeliefUpdatePolicy 尚未实现，返回空更新")
-        return BeliefUpdate()
+        # 调用信念修正策略
+        return self.world_model.belief_update_policy.update_belief(observation_result)
     
     async def reason(
         self,
@@ -365,8 +368,10 @@ class CognitiveLayer:
         if not self.world_model:
             raise ValueError("WorldModel 未初始化")
         
-        # TODO: 从 WorldModel 中获取已证伪的信念列表
-        # 待 BeliefUpdatePolicy 实现后完善
+        # 从 BeliefUpdatePolicy 获取已证伪的信念列表
+        if hasattr(self.world_model, 'belief_update_policy'):
+            return self.world_model.belief_update_policy.get_falsified_beliefs()
+        
         return []
     
     def start_monitoring(self):
@@ -384,3 +389,4 @@ class CognitiveLayer:
             raise ValueError("PerceptionMonitor 未初始化")
         
         logger.info("停止感知监控")
+

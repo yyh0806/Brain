@@ -95,3 +95,4 @@ class ReasoningResult:
         lines.append(f"\n最终判断: {self.decision}")
         
         return "\n".join(lines)
+

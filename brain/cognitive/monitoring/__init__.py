@@ -3,8 +3,8 @@
 监控模块 - Monitoring Module
 """
 
-from brain.cognitive.monitoring.perception_monitor import PerceptionMonitor
-from brain.cognitive.monitoring.monitor_events import (
+from brain.cognitive.monitoring.perception_monitor import (
+    PerceptionMonitor,
     TriggerAction,
     ReplanTrigger,
     MonitorEvent
@@ -16,3 +16,4 @@ __all__ = [
     "ReplanTrigger",
     "MonitorEvent",
 ]
+

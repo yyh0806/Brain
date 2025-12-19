@@ -3,18 +3,18 @@
 对话模块 - Dialogue Module
 """
 
-from brain.cognitive.dialogue.dialogue_manager import DialogueManager
-from brain.cognitive.dialogue.dialogue_types import (
+from brain.cognitive.dialogue.dialogue_manager import (
+    DialogueManager,
+    DialogueContext,
     DialogueType,
     DialogueState,
-    DialogueMessage,
-    DialogueContext
+    DialogueMessage
 )
 
 __all__ = [
     "DialogueManager",
+    "DialogueContext",
     "DialogueType",
     "DialogueState",
     "DialogueMessage",
-    "DialogueContext",
 ]

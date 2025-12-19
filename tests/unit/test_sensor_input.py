@@ -20,7 +20,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from brain.cognitive.world_model.sensor_input_types import (
+from brain.perception.sensor_input_types import (
     SensorDataPacket,
     SensorType,
     PointCloudData,
@@ -35,7 +35,7 @@ from brain.cognitive.world_model.sensor_input_types import (
     validate_sensor_data_quality,
 )
 
-from brain.cognitive.world_model.sensor_interface import (
+from brain.perception.sensors.sensor_interface import (
     BaseSensor,
     SensorConfig,
     PointCloudSensor,
@@ -45,7 +45,7 @@ from brain.cognitive.world_model.sensor_interface import (
     create_sensor,
 )
 
-from brain.cognitive.world_model.sensor_manager import (
+from brain.perception.sensors.sensor_manager import (
     MultiSensorManager,
     SensorGroup,
     SyncMethod,
@@ -54,7 +54,7 @@ from brain.cognitive.world_model.sensor_manager import (
     DataQualityAssessment,
 )
 
-from brain.cognitive.world_model.data_converter import (
+from brain.perception.data_converter import (
     DataConverter,
     DataFormat,
     ConversionResult,
@@ -754,7 +754,7 @@ class TestDataConverter(unittest.TestCase):
         self.assertIn(DataFormat.BRAIN_NATIVE, supported_formats)
         self.assertIn(DataFormat.ROS2, supported_formats)
 
-    @patch('brain.cognitive.world_model.data_converter.ROS2Converter._check_ros2_availability')
+    @patch('brain.perception.data_converter.ROS2Converter._check_ros2_availability')
     def test_ros2_conversion_without_ros2(self, mock_check):
         """Test ROS2 conversion when ROS2 is not available."""
         mock_check.return_value = False
