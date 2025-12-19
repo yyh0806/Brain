@@ -13,12 +13,16 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
+from collections import deque
 import numpy as np
 import math
 from loguru import logger
 
 from brain.communication.ros2_interface import ROS2Interface, SensorData, ROS2Config
 from brain.perception.occupancy_mapper import OccupancyMapper
+from brain.perception.utils.coordinates import quaternion_to_euler, transform_local_to_world
+from brain.perception.utils.math_utils import angle_to_direction, compute_laser_angles
+from brain.perception.data_models import Pose2D, Pose3D, Velocity
 
 
 class SensorType(Enum):
@@ -50,60 +54,6 @@ class SensorStatus:
             return False
         elapsed = (datetime.now() - self.last_update).total_seconds()
         return elapsed < timeout
-
-
-@dataclass
-class Pose2D:
-    """2D位姿"""
-    x: float = 0.0
-    y: float = 0.0
-    theta: float = 0.0  # yaw角，弧度
-    
-    def to_dict(self) -> Dict[str, float]:
-        return {"x": self.x, "y": self.y, "theta": self.theta}
-
-
-@dataclass
-class Pose3D:
-    """3D位姿"""
-    x: float = 0.0
-    y: float = 0.0
-    z: float = 0.0
-    roll: float = 0.0
-    pitch: float = 0.0
-    yaw: float = 0.0
-    
-    def to_dict(self) -> Dict[str, float]:
-        return {
-            "x": self.x, "y": self.y, "z": self.z,
-            "roll": self.roll, "pitch": self.pitch, "yaw": self.yaw
-        }
-    
-    def to_2d(self) -> Pose2D:
-        """转换为2D位姿"""
-        return Pose2D(x=self.x, y=self.y, theta=self.yaw)
-
-
-@dataclass
-class Velocity:
-    """速度"""
-    linear_x: float = 0.0
-    linear_y: float = 0.0
-    linear_z: float = 0.0
-    angular_x: float = 0.0
-    angular_y: float = 0.0
-    angular_z: float = 0.0
-    
-    def to_dict(self) -> Dict[str, float]:
-        """转换为字典"""
-        return {
-            "linear_x": self.linear_x,
-            "linear_y": self.linear_y,
-            "linear_z": self.linear_z,
-            "angular_x": self.angular_x,
-            "angular_y": self.angular_y,
-            "angular_z": self.angular_z
-        }
 
 
 @dataclass
@@ -204,10 +154,10 @@ class ROS2SensorManager:
         self.sensor_status: Dict[SensorType, SensorStatus] = {}
         self._init_sensor_status()
         
-        # 数据缓存
+        # 数据缓存（使用循环缓冲区防止内存泄漏）
         self._latest_data: Optional[PerceptionData] = None
-        self._data_history: List[PerceptionData] = []
-        self._max_history = self.config.get("max_history", 100)
+        max_history = self.config.get("max_history", 100)
+        self._data_history: deque = deque(maxlen=max_history)  # 固定大小的循环缓冲区
         
         # 传感器融合参数
         self._pose_filter_alpha = self.config.get("pose_filter_alpha", 0.8)
@@ -274,7 +224,7 @@ class ROS2SensorManager:
         # 处理激光雷达
         if raw_data.laser_scan:
             perception.laser_ranges = raw_data.laser_scan.get("ranges", [])
-            perception.laser_angles = self._compute_laser_angles(raw_data.laser_scan)
+            perception.laser_angles = compute_laser_angles(raw_data.laser_scan)
             perception.obstacles = self._detect_obstacles_from_laser(
                 perception.laser_ranges,
                 perception.laser_angles,
@@ -296,28 +246,32 @@ class ROS2SensorManager:
                 perception.grid_origin = (origin.get("x", 0), origin.get("y", 0))
             self._update_sensor_status(SensorType.OCCUPANCY_GRID, True)
         
-        # 从深度图/激光/点云生成占据栅格
+        # 从深度图/激光/点云生成占据栅格（异步处理CPU密集型操作）
         if perception.pose:
             pose_2d = (perception.pose.x, perception.pose.y, perception.pose.yaw)
             
-            # 从深度图更新
+            # 从深度图更新（异步）
             if perception.depth_image is not None:
-                self.occupancy_mapper.update_from_depth(
+                # 使用异步处理避免阻塞
+                await asyncio.to_thread(
+                    self.occupancy_mapper.update_from_depth,
                     perception.depth_image,
                     pose=pose_2d
                 )
             
-            # 从激光雷达更新
+            # 从激光雷达更新（异步）
             if perception.laser_ranges and perception.laser_angles:
-                self.occupancy_mapper.update_from_laser(
+                await asyncio.to_thread(
+                    self.occupancy_mapper.update_from_laser,
                     perception.laser_ranges,
                     perception.laser_angles,
                     pose=pose_2d
                 )
             
-            # 从点云更新
+            # 从点云更新（异步）
             if perception.pointcloud is not None:
-                self.occupancy_mapper.update_from_pointcloud(
+                await asyncio.to_thread(
+                    self.occupancy_mapper.update_from_pointcloud,
                     perception.pointcloud,
                     pose=pose_2d
                 )
@@ -336,11 +290,9 @@ class ROS2SensorManager:
             for sensor_type, status in self.sensor_status.items()
         }
         
-        # 缓存数据
+        # 缓存数据（使用循环缓冲区，自动限制大小）
         self._latest_data = perception
-        self._data_history.append(perception)
-        if len(self._data_history) > self._max_history:
-            self._data_history.pop(0)
+        self._data_history.append(perception)  # deque会自动移除最旧的元素
         
         return perception
     
@@ -352,7 +304,7 @@ class ROS2SensorManager:
         # 从四元数计算欧拉角
         q = (orient.get("x", 0), orient.get("y", 0), 
              orient.get("z", 0), orient.get("w", 1))
-        roll, pitch, yaw = self._quaternion_to_euler(q)
+        roll, pitch, yaw = quaternion_to_euler(q)
         
         return Pose3D(
             x=pos.get("x", 0),
@@ -382,7 +334,7 @@ class ROS2SensorManager:
         imu_orient = imu.get("orientation", {})
         q = (imu_orient.get("x", 0), imu_orient.get("y", 0),
              imu_orient.get("z", 0), imu_orient.get("w", 1))
-        imu_roll, imu_pitch, imu_yaw = self._quaternion_to_euler(q)
+        imu_roll, imu_pitch, imu_yaw = quaternion_to_euler(q)
         
         # 互补滤波
         alpha = self._pose_filter_alpha
@@ -392,49 +344,6 @@ class ROS2SensorManager:
         
         return pose
     
-    def _quaternion_to_euler(self, q: Tuple[float, float, float, float]) -> Tuple[float, float, float]:
-        """四元数转欧拉角"""
-        x, y, z, w = q
-        
-        # roll (x-axis rotation)
-        sinr_cosp = 2 * (w * x + y * z)
-        cosr_cosp = 1 - 2 * (x * x + y * y)
-        roll = math.atan2(sinr_cosp, cosr_cosp)
-        
-        # pitch (y-axis rotation)
-        sinp = 2 * (w * y - z * x)
-        if abs(sinp) >= 1:
-            pitch = math.copysign(math.pi / 2, sinp)
-        else:
-            pitch = math.asin(sinp)
-        
-        # yaw (z-axis rotation)
-        siny_cosp = 2 * (w * z + x * y)
-        cosy_cosp = 1 - 2 * (y * y + z * z)
-        yaw = math.atan2(siny_cosp, cosy_cosp)
-        
-        return roll, pitch, yaw
-    
-    def _compute_laser_angles(self, laser_scan: Dict[str, Any]) -> List[float]:
-        """计算激光雷达角度数组"""
-        angle_min = laser_scan.get("angle_min", -math.pi)
-        angle_max = laser_scan.get("angle_max", math.pi)
-        angle_increment = laser_scan.get("angle_increment", 0)
-        
-        if angle_increment > 0:
-            angles = []
-            angle = angle_min
-            while angle <= angle_max:
-                angles.append(angle)
-                angle += angle_increment
-            return angles
-        
-        ranges = laser_scan.get("ranges", [])
-        n = len(ranges)
-        if n > 0:
-            return [angle_min + i * (angle_max - angle_min) / n for i in range(n)]
-        
-        return []
     
     def _detect_obstacles_from_laser(
         self,
@@ -505,15 +414,15 @@ class ROS2SensorManager:
             
             # 计算方向
             angle = math.atan2(center_y, center_x)
-            direction = self._angle_to_direction(angle)
+            direction = angle_to_direction(angle)
             
             # 转换到世界坐标（如果有位姿）
-            world_x, world_y = center_x, center_y
             if pose:
-                cos_yaw = math.cos(pose.yaw)
-                sin_yaw = math.sin(pose.yaw)
-                world_x = pose.x + center_x * cos_yaw - center_y * sin_yaw
-                world_y = pose.y + center_x * sin_yaw + center_y * cos_yaw
+                world_x, world_y = transform_local_to_world(
+                    center_x, center_y, pose.x, pose.y, pose.yaw
+                )
+            else:
+                world_x, world_y = center_x, center_y
             
             obstacles.append({
                 "id": f"obs_{len(obstacles)}",
@@ -528,28 +437,6 @@ class ROS2SensorManager:
             })
         
         return obstacles
-    
-    def _angle_to_direction(self, angle: float) -> str:
-        """将角度转换为方向描述"""
-        # 角度范围 -pi 到 pi
-        angle_deg = math.degrees(angle)
-        
-        if -22.5 <= angle_deg < 22.5:
-            return "前方"
-        elif 22.5 <= angle_deg < 67.5:
-            return "左前方"
-        elif 67.5 <= angle_deg < 112.5:
-            return "左侧"
-        elif 112.5 <= angle_deg < 157.5:
-            return "左后方"
-        elif angle_deg >= 157.5 or angle_deg < -157.5:
-            return "后方"
-        elif -157.5 <= angle_deg < -112.5:
-            return "右后方"
-        elif -112.5 <= angle_deg < -67.5:
-            return "右侧"
-        else:
-            return "右前方"
     
     def _update_sensor_status(self, sensor_type: SensorType, connected: bool):
         """更新传感器状态"""
@@ -613,7 +500,8 @@ class ROS2SensorManager:
     
     def get_data_history(self, count: int = 10) -> List[PerceptionData]:
         """获取历史数据"""
-        return self._data_history[-count:]
+        # 返回最近的count条数据
+        return list(self._data_history)[-count:] if len(self._data_history) > 0 else []
     
     async def wait_for_sensors(self, timeout: float = 10.0) -> bool:
         """等待传感器就绪"""

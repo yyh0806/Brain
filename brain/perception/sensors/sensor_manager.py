@@ -1,806 +1,783 @@
+# -*- coding: utf-8 -*-
 """
-传感器管理器 - Sensor Manager
+Multi-Sensor Manager Module
 
-负责:
-- 管理各类传感器
-- 数据采集与融合
-- 传感器状态监控
-- 数据预处理
+This module provides comprehensive sensor management capabilities including
+multi-sensor synchronization, data quality assessment, and temporal alignment
+for the Brain cognitive world model system.
+
+Author: Brain Development Team
+Date: 2025-12-17
 """
 
-import asyncio
-from typing import Dict, List, Any, Optional, Callable, Deque
-from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from enum import Enum
-from abc import ABC, abstractmethod
-import uuid
-import time
+from enum import Enum, IntEnum
+from typing import Dict, List, Optional, Set, Tuple, Union, Any, Callable
+from collections import defaultdict, deque
 import threading
-from loguru import logger
+import time
+import numpy as np
+import logging
+from concurrent.futures import ThreadPoolExecutor
+import queue
 
-# 导入缓存管理器
-try:
-    from brain.utils.cache_manager import get_cache_manager, cached_async
-    CACHE_AVAILABLE = True
-except ImportError:
-    logger.warning("缓存管理器不可用，传感器管理器将运行在无缓存模式")
-    CACHE_AVAILABLE = False
+from .sensor_interface import BaseSensor, SensorConfig, create_sensor
+from brain.perception.sensor_input_types import (
+    SensorDataPacket,
+    SensorType,
+    SensorDataBuffer,
+    QualityAssessment,
+)
 
-
-class SensorType(Enum):
-    """传感器类型"""
-    CAMERA = "camera"
-    LIDAR = "lidar"
-    GPS = "gps"
-    IMU = "imu"
-    ULTRASONIC = "ultrasonic"
-    RADAR = "radar"
-    DEPTH_CAMERA = "depth_camera"
-    THERMAL = "thermal"
-    BAROMETER = "barometer"
-    COMPASS = "compass"
+# Configure logging
+logger = logging.getLogger(__name__)
 
 
-class SensorStatus(Enum):
-    """传感器状态"""
-    UNKNOWN = "unknown"
-    INITIALIZING = "initializing"
-    READY = "ready"
-    ACTIVE = "active"
+class SensorSyncStatus(Enum):
+    """Synchronization status for sensors."""
+    SYNCHRONIZED = "synchronized"
+    UNSYNCHRONIZED = "unsynchronized"
+    CALIBRATING = "calibrating"
     ERROR = "error"
-    DISCONNECTED = "disconnected"
+    OFFLINE = "offline"
+
+
+class SyncMethod(Enum):
+    """Available synchronization methods."""
+    TIMESTAMP_ALIGNMENT = "timestamp_alignment"
+    HARDWARE_TRIGGER = "hardware_trigger"
+    SOFTWARE_TRIGGER = "software_trigger"
+    INTERPOLATION = "interpolation"
 
 
 @dataclass
-class SensorData:
-    """传感器数据"""
+class SensorGroup:
+    """Group of sensors that should be synchronized together."""
+    group_id: str
+    sensor_ids: Set[str]
+    sync_method: SyncMethod
+    sync_tolerance: float = 0.01  # seconds
+    priority_sensors: List[str] = field(default_factory=list)
+    max_sync_attempts: int = 3
+
+
+@dataclass
+class SynchronizedDataPacket:
+    """Synchronized multi-sensor data packet."""
+    timestamp: float
+    sensor_packets: Dict[str, SensorDataPacket]
+    sync_quality: float
+    sync_method: SyncMethod
+    group_id: str
+
+    # Temporal alignment information
+    max_timestamp_delta: float
+    avg_timestamp_delta: float
+
+    def get_sensor_data(self, sensor_id: str) -> Optional[SensorDataPacket]:
+        """Get data packet for specific sensor."""
+        return self.sensor_packets.get(sensor_id)
+
+    def has_sensor(self, sensor_id: str) -> bool:
+        """Check if packet contains data from specific sensor."""
+        return sensor_id in self.sensor_packets
+
+    def get_sensor_types(self) -> Set[SensorType]:
+        """Get all sensor types in this synchronized packet."""
+        return {packet.sensor_type for packet in self.sensor_packets.values()}
+
+
+@dataclass
+class DataQualityAssessment:
+    """Assessment of sensor data quality and reliability."""
     sensor_id: str
-    sensor_type: SensorType
-    timestamp: datetime
-    data: Any
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    quality: float = 1.0  # 数据质量 0-1
+    timestamp: float
+    overall_quality: float  # 0.0 to 1.0
+    completeness: float     # 0.0 to 1.0
+    consistency: float     # 0.0 to 1.0
+    timeliness: float      # 0.0 to 1.0
+    accuracy: float        # 0.0 to 1.0
+
+    # Quality metrics
+    data_points: int = 0
+    noise_level: float = 0.0
+    outlier_ratio: float = 0.0
+    missing_data_ratio: float = 0.0
+
+    # Quality flags
+    has_anomalies: bool = False
+    is_degraded: bool = False
+    is_invalid: bool = False
+
+    # Issues and recommendations
+    issues: List[str] = field(default_factory=list)
+    recommendations: List[str] = field(default_factory=list)
 
 
 @dataclass
-class SensorConfig:
-    """传感器配置"""
-    sensor_type: SensorType
-    enabled: bool = True
-    update_rate: float = 10.0  # Hz
-    parameters: Dict[str, Any] = field(default_factory=dict)
+class SensorPerformanceMetrics:
+    """Performance metrics for a sensor."""
+    sensor_id: str
+    update_period_mean: float
+    update_period_std: float
+    processing_time_mean: float
+    processing_time_std: float
+    quality_mean: float
+    quality_std: float
+    packet_loss_rate: float
+    uptime_percentage: float
+    last_update_time: float
+
+    # Recent history
+    recent_periods: List[float] = field(default_factory=list)
+    recent_qualities: List[float] = field(default_factory=list)
 
 
-class BaseSensor(ABC):
-    """传感器基类"""
-    
-    def __init__(
-        self, 
-        sensor_id: str,
-        sensor_type: SensorType,
-        config: SensorConfig
-    ):
-        self.sensor_id = sensor_id
-        self.sensor_type = sensor_type
-        self.config = config
-        self.status = SensorStatus.UNKNOWN
-        self.last_data: Optional[SensorData] = None
-        self.error_count = 0
-        
-    @abstractmethod
-    async def initialize(self) -> bool:
-        """初始化传感器"""
-        pass
-    
-    @abstractmethod
-    async def read(self) -> Optional[SensorData]:
-        """读取传感器数据"""
-        pass
-    
-    @abstractmethod
-    async def shutdown(self):
-        """关闭传感器"""
-        pass
-    
-    def get_status(self) -> Dict[str, Any]:
-        """获取传感器状态"""
-        return {
-            "sensor_id": self.sensor_id,
-            "type": self.sensor_type.value,
-            "status": self.status.value,
-            "error_count": self.error_count,
-            "last_update": (
-                self.last_data.timestamp.isoformat()
-                if self.last_data else None
-            )
-        }
-
-
-class CameraSensor(BaseSensor):
-    """相机传感器"""
-    
-    def __init__(self, sensor_id: str, config: SensorConfig):
-        super().__init__(sensor_id, SensorType.CAMERA, config)
-        self.resolution = config.parameters.get("resolution", [1920, 1080])
-        self.fps = config.parameters.get("fps", 30)
-        
-    async def initialize(self) -> bool:
-        self.status = SensorStatus.INITIALIZING
-        try:
-            # 这里应该连接实际的相机设备
-            # 示例中模拟初始化
-            await asyncio.sleep(0.1)
-            self.status = SensorStatus.READY
-            logger.info(f"相机 [{self.sensor_id}] 初始化完成")
-            return True
-        except Exception as e:
-            self.status = SensorStatus.ERROR
-            logger.error(f"相机初始化失败: {e}")
-            return False
-    
-    async def read(self) -> Optional[SensorData]:
-        if self.status not in [SensorStatus.READY, SensorStatus.ACTIVE]:
-            return None
-            
-        self.status = SensorStatus.ACTIVE
-        
-        try:
-            # 这里应该从实际相机读取图像
-            # 示例中返回模拟数据
-            data = SensorData(
-                sensor_id=self.sensor_id,
-                sensor_type=self.sensor_type,
-                timestamp=datetime.now(),
-                data={
-                    "frame_id": uuid.uuid4().hex[:8],
-                    "resolution": self.resolution,
-                    "image": None  # 实际应为图像数据
-                },
-                metadata={"fps": self.fps}
-            )
-            self.last_data = data
-            return data
-            
-        except Exception as e:
-            self.error_count += 1
-            logger.error(f"相机读取失败: {e}")
-            return None
-    
-    async def shutdown(self):
-        self.status = SensorStatus.DISCONNECTED
-        logger.info(f"相机 [{self.sensor_id}] 已关闭")
-
-
-class LidarSensor(BaseSensor):
-    """激光雷达传感器"""
-    
-    def __init__(self, sensor_id: str, config: SensorConfig):
-        super().__init__(sensor_id, SensorType.LIDAR, config)
-        self.range = config.parameters.get("range", 100.0)
-        self.points_per_second = config.parameters.get("points_per_second", 300000)
-        
-    async def initialize(self) -> bool:
-        self.status = SensorStatus.INITIALIZING
-        try:
-            await asyncio.sleep(0.2)
-            self.status = SensorStatus.READY
-            logger.info(f"激光雷达 [{self.sensor_id}] 初始化完成")
-            return True
-        except Exception as e:
-            self.status = SensorStatus.ERROR
-            logger.error(f"激光雷达初始化失败: {e}")
-            return False
-    
-    async def read(self) -> Optional[SensorData]:
-        if self.status not in [SensorStatus.READY, SensorStatus.ACTIVE]:
-            return None
-            
-        self.status = SensorStatus.ACTIVE
-        
-        try:
-            # 模拟点云数据
-            data = SensorData(
-                sensor_id=self.sensor_id,
-                sensor_type=self.sensor_type,
-                timestamp=datetime.now(),
-                data={
-                    "point_cloud": [],  # 实际应为点云数据
-                    "num_points": 0
-                },
-                metadata={
-                    "range": self.range,
-                    "points_per_second": self.points_per_second
-                }
-            )
-            self.last_data = data
-            return data
-            
-        except Exception as e:
-            self.error_count += 1
-            logger.error(f"激光雷达读取失败: {e}")
-            return None
-    
-    async def shutdown(self):
-        self.status = SensorStatus.DISCONNECTED
-        logger.info(f"激光雷达 [{self.sensor_id}] 已关闭")
-
-
-class GPSSensor(BaseSensor):
-    """GPS传感器"""
-    
-    def __init__(self, sensor_id: str, config: SensorConfig):
-        super().__init__(sensor_id, SensorType.GPS, config)
-        self.accuracy = config.parameters.get("accuracy", 0.01)
-        
-    async def initialize(self) -> bool:
-        self.status = SensorStatus.INITIALIZING
-        try:
-            await asyncio.sleep(0.5)  # GPS初始化通常较慢
-            self.status = SensorStatus.READY
-            logger.info(f"GPS [{self.sensor_id}] 初始化完成")
-            return True
-        except Exception as e:
-            self.status = SensorStatus.ERROR
-            logger.error(f"GPS初始化失败: {e}")
-            return False
-    
-    async def read(self) -> Optional[SensorData]:
-        if self.status not in [SensorStatus.READY, SensorStatus.ACTIVE]:
-            return None
-            
-        self.status = SensorStatus.ACTIVE
-        
-        try:
-            # 模拟GPS数据
-            data = SensorData(
-                sensor_id=self.sensor_id,
-                sensor_type=self.sensor_type,
-                timestamp=datetime.now(),
-                data={
-                    "latitude": 0.0,
-                    "longitude": 0.0,
-                    "altitude": 0.0,
-                    "accuracy": self.accuracy,
-                    "satellites": 12,
-                    "fix_type": "3D"
-                }
-            )
-            self.last_data = data
-            return data
-            
-        except Exception as e:
-            self.error_count += 1
-            logger.error(f"GPS读取失败: {e}")
-            return None
-    
-    async def shutdown(self):
-        self.status = SensorStatus.DISCONNECTED
-        logger.info(f"GPS [{self.sensor_id}] 已关闭")
-
-
-class IMUSensor(BaseSensor):
-    """惯性测量单元传感器"""
-    
-    def __init__(self, sensor_id: str, config: SensorConfig):
-        super().__init__(sensor_id, SensorType.IMU, config)
-        self.rate = config.parameters.get("rate", 100)
-        
-    async def initialize(self) -> bool:
-        self.status = SensorStatus.INITIALIZING
-        try:
-            await asyncio.sleep(0.1)
-            self.status = SensorStatus.READY
-            logger.info(f"IMU [{self.sensor_id}] 初始化完成")
-            return True
-        except Exception as e:
-            self.status = SensorStatus.ERROR
-            logger.error(f"IMU初始化失败: {e}")
-            return False
-    
-    async def read(self) -> Optional[SensorData]:
-        if self.status not in [SensorStatus.READY, SensorStatus.ACTIVE]:
-            return None
-            
-        self.status = SensorStatus.ACTIVE
-        
-        try:
-            # 模拟IMU数据
-            data = SensorData(
-                sensor_id=self.sensor_id,
-                sensor_type=self.sensor_type,
-                timestamp=datetime.now(),
-                data={
-                    "acceleration": {"x": 0.0, "y": 0.0, "z": -9.8},
-                    "gyroscope": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "magnetometer": {"x": 0.0, "y": 0.0, "z": 0.0},
-                    "orientation": {"roll": 0.0, "pitch": 0.0, "yaw": 0.0}
-                }
-            )
-            self.last_data = data
-            return data
-            
-        except Exception as e:
-            self.error_count += 1
-            logger.error(f"IMU读取失败: {e}")
-            return None
-    
-    async def shutdown(self):
-        self.status = SensorStatus.DISCONNECTED
-        logger.info(f"IMU [{self.sensor_id}] 已关闭")
-
-
-class AsyncBatchedSensorManager:
+class MultiSensorManager:
     """
-    异步批量传感器管理器
+    Comprehensive multi-sensor management system.
 
-    提供高性能的传感器数据采集和批处理功能
+    This class provides unified management of multiple sensors including
+    synchronization, quality assessment, temporal alignment, and data
+    routing for downstream processing.
     """
 
-    SENSOR_CLASSES = {
-        SensorType.CAMERA: CameraSensor,
-        SensorType.LIDAR: LidarSensor,
-        SensorType.GPS: GPSSensor,
-        SensorType.IMU: IMUSensor,
-    }
+    def __init__(self, max_sync_window: float = 0.1, max_buffer_size: int = 1000):
+        """
+        Initialize multi-sensor manager.
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
-        self.config = config or {}
+        Args:
+            max_sync_window: Maximum time window for synchronization (seconds)
+            max_buffer_size: Maximum buffer size for each sensor
+        """
+        self.max_sync_window = max_sync_window
+        self.max_buffer_size = max_buffer_size
+
+        # Sensor management
         self.sensors: Dict[str, BaseSensor] = {}
-        self.data_callbacks: List[Callable[[List[SensorData]], None]] = []
+        self.sensor_configs: Dict[str, SensorConfig] = {}
+        self.sensor_groups: Dict[str, SensorGroup] = {}
+        self.active_sensors: Set[str] = set()
 
-        # 高性能数据缓存
-        self.data_buffer: Dict[str, Deque] = defaultdict(lambda: deque(maxlen=100))
-        self.buffer_lock = asyncio.Lock()
+        # Data buffering
+        self.global_buffer: Dict[str, SensorDataBuffer] = defaultdict(
+            lambda: SensorDataBuffer(max_buffer_size, max_age_seconds=5.0)
+        )
 
-        # 批处理配置
-        self.batch_size = self.config.get("batch_size", 10)
-        self.batch_timeout = self.config.get("batch_timeout", 0.05)  # 50ms
+        # Synchronization state
+        self.sync_status: Dict[str, SensorSyncStatus] = {}
+        self.sync_buffers: Dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
 
-        # 缓存系统
-        self.cache_manager = None
-        self.sensor_cache = None
-        if CACHE_AVAILABLE:
-            self.cache_manager = get_cache_manager()
-            self.sensor_cache = self.cache_manager.create_cache(
-                name="sensor_data",
-                cache_type="ttl",
-                max_size=5000,
-                ttl_seconds=1.0  # 1秒TTL
-            )
+        # Thread safety
+        self._manager_lock = threading.RLock()
+        self._sync_lock = threading.RLock()
 
-        # 异步任务池
-        self._collection_tasks: Dict[str, asyncio.Task] = {}
-        self._batch_processor_task: Optional[asyncio.Task] = None
-        self._running = False
+        # Callbacks for synchronized data
+        self._sync_callbacks: List[Callable[[SynchronizedDataPacket], None]] = []
 
-        # 性能监控
-        self.metrics = {
-            "total_readings": 0,
-            "successful_reads": 0,
-            "failed_reads": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "average_read_time": 0.0,
-            "batch_efficiency": 0.0,
-            "buffer_utilization": 0.0
+        # Threading for synchronization
+        self._sync_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="SensorSync")
+        self._sync_stop_event = threading.Event()
+
+        # Performance monitoring
+        self.performance_metrics: Dict[str, SensorPerformanceMetrics] = {}
+        self._monitoring_thread: Optional[threading.Thread] = None
+
+        # Statistics
+        self.stats = {
+            "total_sync_operations": 0,
+            "successful_syncs": 0,
+            "failed_syncs": 0,
+            "average_sync_quality": 0.0,
+            "sync_rate": 0.0,
+            "start_time": time.time(),
         }
 
-        # 读取时间历史
-        self.read_times: deque = deque(maxlen=1000)
+        logger.info("Multi-sensor manager initialized")
 
-        logger.info("AsyncBatchedSensorManager 初始化完成 (高性能模式)")
-    
-    async def initialize(self):
-        """初始化所有传感器"""
-        sensors_config = self.config.get("sensors", {})
+    def add_sensor(self, sensor: BaseSensor, config: SensorConfig) -> bool:
+        """
+        Add a sensor to the manager.
 
-        initialization_tasks = []
-        for sensor_name, sensor_cfg in sensors_config.items():
-            if not sensor_cfg.get("enabled", True):
-                continue
+        Args:
+            sensor: Sensor instance to add
+            config: Sensor configuration
 
-            try:
-                sensor_type = SensorType(sensor_name)
-                sensor_class = self.SENSOR_CLASSES.get(sensor_type)
-
-                if sensor_class:
-                    config = SensorConfig(
-                        sensor_type=sensor_type,
-                        enabled=True,
-                        parameters=sensor_cfg
-                    )
-
-                    # 并行初始化传感器
-                    task = asyncio.create_task(
-                        self._initialize_sensor(sensor_class, sensor_name, config)
-                    )
-                    initialization_tasks.append(task)
-
-            except ValueError:
-                logger.warning(f"未知传感器类型: {sensor_name}")
-
-        # 等待所有传感器初始化完成
-        results = await asyncio.gather(*initialization_tasks, return_exceptions=True)
-
-        successful_sensors = sum(1 for r in results if r is True)
-        total_sensors = len(initialization_tasks)
-
-        logger.info(f"传感器初始化完成: {successful_sensors}/{total_sensors} 成功")
-
-        # 更新缓冲区利用率
-        await self._update_buffer_utilization()
-
-    async def _initialize_sensor(
-        self, sensor_class, sensor_name: str, config: SensorConfig
-    ) -> bool:
-        """初始化单个传感器"""
-        try:
-            sensor = sensor_class(
-                sensor_id=f"{sensor_name}_0",
-                config=config
-            )
-
-            if await sensor.initialize():
-                self.sensors[sensor.sensor_id] = sensor
-                logger.info(f"传感器 {sensor.sensor_id} 初始化成功")
-                return True
-            else:
-                logger.warning(f"传感器 {sensor_name} 初始化失败")
+        Returns:
+            True if sensor added successfully, False otherwise
+        """
+        with self._manager_lock:
+            if sensor.config.sensor_id in self.sensors:
+                logger.warning(f"Sensor {sensor.config.sensor_id} already exists")
                 return False
 
-        except Exception as e:
-            logger.error(f"传感器 {sensor_name} 初始化异常: {e}")
-            return False
+            self.sensors[sensor.config.sensor_id] = sensor
+            self.sensor_configs[sensor.config.sensor_id] = config
+            self.sync_status[sensor.config.sensor_id] = SensorSyncStatus.UNSYNCHRONIZED
 
-    def register_sensor(self, sensor: BaseSensor):
-        """注册传感器"""
-        self.sensors[sensor.sensor_id] = sensor
-        logger.info(f"传感器 {sensor.sensor_id} 已注册")
+            # Add callback for data collection
+            sensor.add_callback(self._on_sensor_data)
 
-    def unregister_sensor(self, sensor_id: str):
-        """注销传感器"""
-        if sensor_id in self.sensors:
+            logger.info(f"Added sensor {sensor.config.sensor_id} of type {config.sensor_type}")
+            return True
+
+    def remove_sensor(self, sensor_id: str) -> bool:
+        """
+        Remove a sensor from the manager.
+
+        Args:
+            sensor_id: ID of sensor to remove
+
+        Returns:
+            True if sensor removed successfully, False otherwise
+        """
+        with self._manager_lock:
+            if sensor_id not in self.sensors:
+                logger.warning(f"Sensor {sensor_id} not found")
+                return False
+
+            sensor = self.sensors[sensor_id]
+            sensor.stop()
+            sensor.remove_callback(self._on_sensor_data)
+
             del self.sensors[sensor_id]
-            logger.info(f"传感器 {sensor_id} 已注销")
+            del self.sensor_configs[sensor_id]
+            del self.sync_status[sensor_id]
+            del self.global_buffer[sensor_id]
 
-    async def start_collection(self):
-        """启动异步批量数据采集"""
-        if self._running:
-            return
+            # Remove from all groups
+            for group in self.sensor_groups.values():
+                group.sensor_ids.discard(sensor_id)
 
-        self._running = True
+            self.active_sensors.discard(sensor_id)
 
-        # 启动传感器采集循环
-        for sensor_id, sensor in self.sensors.items():
-            if sensor.config.enabled:
-                task = asyncio.create_task(
-                    self._optimized_collection_loop(sensor)
-                )
-                self._collection_tasks[sensor_id] = task
+            logger.info(f"Removed sensor {sensor_id}")
+            return True
 
-        # 启动批处理器
-        self._batch_processor_task = asyncio.create_task(self._batch_processor_loop())
+    def create_sensor_group(self, group_id: str, sensor_ids: List[str],
+                          sync_method: SyncMethod = SyncMethod.TIMESTAMP_ALIGNMENT,
+                          sync_tolerance: float = 0.01) -> bool:
+        """
+        Create a sensor synchronization group.
 
-        logger.info("异步数据采集已启动")
+        Args:
+            group_id: Unique identifier for the group
+            sensor_ids: List of sensor IDs to include in group
+            sync_method: Synchronization method to use
+            sync_tolerance: Time tolerance for synchronization
 
-    async def stop_collection(self):
-        """停止数据采集"""
-        self._running = False
+        Returns:
+            True if group created successfully, False otherwise
+        """
+        with self._manager_lock:
+            # Validate all sensors exist
+            for sensor_id in sensor_ids:
+                if sensor_id not in self.sensors:
+                    logger.error(f"Sensor {sensor_id} not found for group {group_id}")
+                    return False
 
-        # 停止采集任务
-        for task in self._collection_tasks.values():
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
+            if group_id in self.sensor_groups:
+                logger.warning(f"Sensor group {group_id} already exists")
+                return False
 
-        # 停止批处理器
-        if self._batch_processor_task:
-            self._batch_processor_task.cancel()
-            try:
-                await self._batch_processor_task
-            except asyncio.CancelledError:
-                pass
-
-        self._collection_tasks.clear()
-        logger.info("异步数据采集已停止")
-
-    async def _optimized_collection_loop(self, sensor: BaseSensor):
-        """优化的传感器采集循环"""
-        interval = 1.0 / sensor.config.update_rate
-        consecutive_failures = 0
-        max_failures = 5
-
-        while self._running:
-            start_time = time.time()
-
-            try:
-                # 检查缓存
-                cache_key = f"{sensor.sensor_id}_{int(start_time)}"
-                cached_data = None
-
-                if self.sensor_cache:
-                    cached_data = self.sensor_cache.get(cache_key)
-
-                if cached_data is not None:
-                    # 缓存命中
-                    await self._add_to_buffer(cached_data)
-                    self.metrics["cache_hits"] += 1
-                else:
-                    # 缓存未命中，读取传感器
-                    data = await self._read_sensor_with_timeout(sensor, interval * 0.8)
-
-                    if data:
-                        self.metrics["cache_misses"] += 1
-
-                        # 存入缓存
-                        if self.sensor_cache:
-                            self.sensor_cache.set(cache_key, data, ttl_seconds=0.5)
-
-                        # 添加到缓冲区
-                        await self._add_to_buffer(data)
-
-                        self.metrics["successful_reads"] += 1
-                        consecutive_failures = 0
-                    else:
-                        consecutive_failures += 1
-                        self.metrics["failed_reads"] += 1
-
-                self.metrics["total_reads"] += 1
-
-                # 更新读取时间统计
-                read_time = time.time() - start_time
-                self.read_times.append(read_time)
-                self._update_average_read_time()
-
-                # 自适应调整读取间隔
-                if consecutive_failures > 0:
-                    # 失败后增加延迟
-                    await asyncio.sleep(interval * (1 + consecutive_failures * 0.2))
-                else:
-                    # 正常情况下精确控制间隔
-                    elapsed = time.time() - start_time
-                    if elapsed < interval:
-                        await asyncio.sleep(interval - elapsed)
-
-            except asyncio.TimeoutError:
-                self.metrics["failed_reads"] += 1
-                consecutive_failures += 1
-                logger.warning(f"传感器 {sensor.sensor_id} 读取超时")
-
-            except Exception as e:
-                self.metrics["failed_reads"] += 1
-                consecutive_failures += 1
-                logger.error(f"传感器 {sensor.sensor_id} 采集异常: {e}")
-
-                # 连续失败过多时暂时跳过
-                if consecutive_failures >= max_failures:
-                    await asyncio.sleep(interval * 5)
-
-    async def _read_sensor_with_timeout(self, sensor: BaseSensor, timeout: float) -> Optional[SensorData]:
-        """带超时的传感器读取"""
-        return await asyncio.wait_for(sensor.read(), timeout=timeout)
-
-    async def _add_to_buffer(self, data: SensorData):
-        """添加数据到缓冲区"""
-        async with self.buffer_lock:
-            self.data_buffer[data.sensor_id].append(data)
-            self.data_buffer["all"].append(data)
-
-    async def _batch_processor_loop(self):
-        """批处理循环"""
-        last_batch_time = time.time()
-
-        while self._running:
-            try:
-                current_time = time.time()
-                time_since_last_batch = current_time - last_batch_time
-
-                # 检查是否应该处理批次
-                should_process = False
-                batch_data = []
-
-                async with self.buffer_lock:
-                    # 检查"all"缓冲区
-                    if len(self.data_buffer["all"]) >= self.batch_size:
-                        should_process = True
-                        # 取出批次数据
-                        for _ in range(min(self.batch_size, len(self.data_buffer["all"]))):
-                            batch_data.append(self.data_buffer["all"].popleft())
-
-                    elif time_since_last_batch >= self.batch_timeout:
-                        should_process = True
-                        # 取出所有数据
-                        while self.data_buffer["all"]:
-                            batch_data.append(self.data_buffer["all"].popleft())
-
-                if should_process and batch_data:
-                    # 处理批次数据
-                    start_time = time.time()
-                    await self._process_batch(batch_data)
-                    processing_time = time.time() - start_time
-
-                    # 更新批处理效率
-                    batch_size = len(batch_data)
-                    if batch_size > 0:
-                        efficiency = min(1.0, (self.batch_size / batch_size) * (self.batch_timeout / processing_time))
-                        self.metrics["batch_efficiency"] = (
-                            (self.metrics["batch_efficiency"] * 0.7 + efficiency * 0.3)
-                        )
-
-                    last_batch_time = current_time
-                    logger.debug(f"处理批次: {batch_size} 项, 耗时: {processing_time:.3f}s")
-                else:
-                    await asyncio.sleep(0.01)  # 短暂休眠
-
-            except Exception as e:
-                logger.error(f"批处理循环异常: {e}")
-                await asyncio.sleep(0.1)
-
-    async def _process_batch(self, batch_data: List[SensorData]):
-        """处理批次数据"""
-        if not batch_data:
-            return
-
-        try:
-            # 触发批量回调
-            for callback in self.data_callbacks:
-                try:
-                    await callback(batch_data)
-                except Exception as e:
-                    logger.error(f"批量数据回调执行失败: {e}")
-
-        except Exception as e:
-            logger.error(f"批次数据处理失败: {e}")
-
-    def on_data(self, callback: Callable[[List[SensorData]], None]):
-        """注册批量数据回调"""
-        self.data_callbacks.append(callback)
-
-    async def get_current_data(self, batch_mode: bool = True) -> Dict[str, Any]:
-        """获取当前传感器数据"""
-        if batch_mode:
-            # 返回缓冲区中的所有数据
-            async with self.buffer_lock:
-                result = {}
-                for sensor_id, buffer in self.data_buffer.items():
-                    if sensor_id == "all":
-                        continue
-                    if buffer:
-                        result[sensor_id] = [
-                            {
-                                "timestamp": data.timestamp.isoformat(),
-                                "data": data.data,
-                                "quality": data.quality,
-                                "metadata": data.metadata
-                            }
-                            for data in list(buffer)
-                        ]
-                return result
-        else:
-            # 返回最新的数据
-            async with self.buffer_lock:
-                result = {}
-                for sensor_id, buffer in self.data_buffer.items():
-                    if sensor_id == "all":
-                        continue
-                    if buffer:
-                        latest = buffer[-1]
-                        result[sensor_id] = {
-                            "type": latest.sensor_type.value,
-                            "timestamp": latest.timestamp.isoformat(),
-                            "data": latest.data,
-                            "quality": latest.quality,
-                            "metadata": latest.metadata
-                        }
-                return result
-
-    async def get_sensor_data(
-        self,
-        sensor_type: SensorType,
-        use_cache: bool = True
-    ) -> Optional[List[SensorData]]:
-        """获取指定类型传感器的数据（支持缓存）"""
-        if use_cache and self.sensor_cache:
-            # 从缓存获取最近的多个数据点
-            recent_data = []
-            for i in range(min(10, len(self.read_times))):  # 获取最近10个数据点
-                timestamp = time.time() - i * 0.1  # 假设100ms间隔
-                cache_key = f"{sensor_type.value}_{int(timestamp * 1000000)}"
-                cached_data = self.sensor_cache.get(cache_key)
-                if cached_data and cached_data.sensor_type == sensor_type:
-                    recent_data.append(cached_data)
-
-            if recent_data:
-                return recent_data
-
-        # 从缓冲区获取
-        async with self.buffer_lock:
-            if sensor_type.value in self.data_buffer:
-                return list(self.data_buffer[sensor_type.value])
-
-        return None
-
-    def get_sensor_status(self) -> Dict[str, Any]:
-        """获取所有传感器状态"""
-        return {
-            sensor_id: sensor.get_status()
-            for sensor_id, sensor in self.sensors.items()
-        }
-
-    async def _update_buffer_utilization(self):
-        """更新缓冲区利用率"""
-        total_capacity = len(self.data_buffer) * 100
-        current_usage = sum(len(buffer) for buffer in self.data_buffer.values())
-        self.metrics["buffer_utilization"] = current_usage / total_capacity
-
-    def _update_average_read_time(self):
-        """更新平均读取时间"""
-        if self.read_times:
-            self.metrics["average_read_time"] = sum(self.read_times) / len(self.read_times)
-
-    def get_metrics(self) -> Dict[str, Any]:
-        """获取性能指标"""
-        cache_hit_rate = 0.0
-        if self.metrics["cache_hits"] + self.metrics["cache_misses"] > 0:
-            cache_hit_rate = self.metrics["cache_hits"] / (
-                self.metrics["cache_hits"] + self.metrics["cache_misses"]
+            group = SensorGroup(
+                group_id=group_id,
+                sensor_ids=set(sensor_ids),
+                sync_method=sync_method,
+                sync_tolerance=sync_tolerance
             )
 
-        success_rate = 0.0
-        if self.metrics["total_readings"] > 0:
-            success_rate = self.metrics["successful_reads"] / self.metrics["total_readings"]
+            self.sensor_groups[group_id] = group
 
-        return {
-            **self.metrics,
-            "cache_hit_rate": cache_hit_rate,
-            "success_rate": success_rate,
-            "active_sensors": len([s for s in self.metrics.values() if s.status in ["READY", "ACTIVE"]]),
-            "total_sensors": len(self.sensors)
-        }
+            # Initialize sync status for all sensors in group
+            for sensor_id in sensor_ids:
+                self.sync_status[sensor_id] = SensorSyncStatus.UNSYNCHRONIZED
 
-    def get_buffer_stats(self) -> Dict[str, Any]:
-        """获取缓冲区统计"""
-        return {
-            sensor_id: {
-                "size": len(buffer),
-                "max_size": buffer.maxlen
+            logger.info(f"Created sensor group {group_id} with sensors {sensor_ids}")
+            return True
+
+    def start_sensors(self, sensor_ids: Optional[List[str]] = None) -> bool:
+        """
+        Start specified sensors or all sensors.
+
+        Args:
+            sensor_ids: List of sensor IDs to start, None for all
+
+        Returns:
+            True if all sensors started successfully
+        """
+        sensors_to_start = sensor_ids if sensor_ids else list(self.sensors.keys())
+        success = True
+
+        for sensor_id in sensors_to_start:
+            if sensor_id not in self.sensors:
+                logger.error(f"Sensor {sensor_id} not found")
+                success = False
+                continue
+
+            sensor = self.sensors[sensor_id]
+            if sensor.start():
+                self.active_sensors.add(sensor_id)
+                self.sync_status[sensor_id] = SensorSyncStatus.CALIBRATING
+                logger.info(f"Started sensor {sensor_id}")
+            else:
+                logger.error(f"Failed to start sensor {sensor_id}")
+                success = False
+
+        # Start synchronization if not already running
+        if self.active_sensors and not self._monitoring_thread:
+            self._start_synchronization()
+
+        return success
+
+    def stop_sensors(self, sensor_ids: Optional[List[str]] = None) -> None:
+        """
+        Stop specified sensors or all sensors.
+
+        Args:
+            sensor_ids: List of sensor IDs to stop, None for all
+        """
+        sensors_to_stop = sensor_ids if sensor_ids else list(self.sensors.keys())
+
+        for sensor_id in sensors_to_stop:
+            if sensor_id in self.sensors:
+                sensor = self.sensors[sensor_id]
+                sensor.stop()
+                self.active_sensors.discard(sensor_id)
+                self.sync_status[sensor_id] = SensorSyncStatus.OFFLINE
+                logger.info(f"Stopped sensor {sensor_id}")
+
+        # Stop synchronization if no active sensors
+        if not self.active_sensors and self._monitoring_thread:
+            self._stop_synchronization()
+
+    def start_synchronization(self) -> None:
+        """Start multi-sensor synchronization processes."""
+        self._start_synchronization()
+
+    def stop_synchronization(self) -> None:
+        """Stop multi-sensor synchronization processes."""
+        self._stop_synchronization()
+
+    def add_sync_callback(self, callback: Callable[[SynchronizedDataPacket], None]) -> None:
+        """
+        Add callback for synchronized data packets.
+
+        Args:
+            callback: Function to call with synchronized data
+        """
+        with self._sync_lock:
+            self._sync_callbacks.append(callback)
+
+    def remove_sync_callback(self, callback: Callable[[SynchronizedDataPacket], None]) -> None:
+        """
+        Remove callback for synchronized data packets.
+
+        Args:
+            callback: Function to remove
+        """
+        with self._sync_lock:
+            if callback in self._sync_callbacks:
+                self._sync_callbacks.remove(callback)
+
+    def get_synchronized_data(self, group_id: str, count: int = 1) -> List[SynchronizedDataPacket]:
+        """
+        Get recent synchronized data for a specific group.
+
+        Args:
+            group_id: Sensor group ID
+            count: Number of packets to retrieve
+
+        Returns:
+            List of synchronized data packets
+        """
+        with self._sync_lock:
+            if group_id not in self.sync_buffers:
+                return []
+
+            buffer = self.sync_buffers[group_id]
+            return list(buffer)[-count:] if count > 1 else [buffer[-1]] if buffer else []
+
+    def assess_sensor_quality(self, sensor_id: str, window_seconds: float = 5.0) -> DataQualityAssessment:
+        """
+        Assess the quality of data from a specific sensor.
+
+        Args:
+            sensor_id: Sensor ID to assess
+            window_seconds: Time window for assessment
+
+        Returns:
+            Quality assessment for the sensor
+        """
+        current_time = time.time()
+        start_time = current_time - window_seconds
+
+        # Get recent data from buffer
+        buffer = self.global_buffer[sensor_id]
+        recent_packets = buffer.get_by_timerange(start_time, current_time)
+
+        if not recent_packets:
+            return DataQualityAssessment(
+                sensor_id=sensor_id,
+                timestamp=current_time,
+                overall_quality=0.0,
+                completeness=0.0,
+                consistency=0.0,
+                timeliness=0.0,
+                accuracy=0.0,
+                issues=["No data available"],
+                is_invalid=True
+            )
+
+        # Calculate quality metrics
+        qualities = [packet.quality_score for packet in recent_packets]
+        timestamps = [packet.timestamp for packet in recent_packets]
+
+        completeness = len(recent_packets) / max(1, window_seconds * self.sensor_configs[sensor_id].update_rate)
+        completeness = min(1.0, completeness)
+
+        overall_quality = np.mean(qualities)
+        consistency = 1.0 - np.std(qualities) if len(qualities) > 1 else 1.0
+
+        # Assess timeliness (how recent is the data)
+        most_recent = max(timestamps)
+        age = current_time - most_recent
+        timeliness = max(0.0, 1.0 - age / window_seconds)
+
+        # Assess accuracy (placeholder - would need sensor-specific assessment)
+        accuracy = overall_quality  # Simplified
+
+        # Determine issues
+        issues = []
+        has_anomalies = False
+        is_degraded = False
+        is_invalid = False
+
+        if overall_quality < 0.3:
+            issues.append("Very poor data quality")
+            is_invalid = True
+        elif overall_quality < 0.6:
+            issues.append("Degraded data quality")
+            is_degraded = True
+
+        if completeness < 0.5:
+            issues.append("Low data completeness")
+            is_degraded = True
+
+        if timeliness < 0.3:
+            issues.append("Data is stale")
+            is_degraded = True
+
+        if age > window_seconds:
+            issues.append("No recent data")
+            is_invalid = True
+
+        has_anomalies = len(issues) > 0
+
+        return DataQualityAssessment(
+            sensor_id=sensor_id,
+            timestamp=current_time,
+            overall_quality=overall_quality,
+            completeness=completeness,
+            consistency=consistency,
+            timeliness=timeliness,
+            accuracy=accuracy,
+            data_points=len(recent_packets),
+            issues=issues,
+            has_anomalies=has_anomalies,
+            is_degraded=is_degraded,
+            is_invalid=is_invalid,
+            recommendations=self._generate_quality_recommendations(overall_quality, completeness, timeliness)
+        )
+
+    def get_sensor_performance_metrics(self, sensor_id: str) -> Optional[SensorPerformanceMetrics]:
+        """
+        Get performance metrics for a specific sensor.
+
+        Args:
+            sensor_id: Sensor ID
+
+        Returns:
+            Performance metrics or None if sensor not found
+        """
+        if sensor_id not in self.sensors:
+            return None
+
+        sensor = self.sensors[sensor_id]
+        stats = sensor.get_statistics()
+
+        return SensorPerformanceMetrics(
+            sensor_id=sensor_id,
+            update_period_mean=1.0 / max(0.001, stats["average_update_rate"]),
+            update_period_std=0.1,  # Placeholder
+            processing_time_mean=np.mean(self._get_processing_times(sensor_id)),
+            processing_time_std=np.std(self._get_processing_times(sensor_id)),
+            quality_mean=stats.get("average_quality", 0.0),
+            quality_std=0.1,  # Placeholder
+            packet_loss_rate=stats.get("loss_rate_percent", 0.0),
+            uptime_percentage=100.0 if stats["is_running"] else 0.0,
+            last_update_time=stats["last_update_time"]
+        )
+
+    def get_manager_statistics(self) -> Dict[str, Any]:
+        """
+        Get comprehensive manager statistics.
+
+        Returns:
+            Dictionary containing manager statistics
+        """
+        with self._manager_lock:
+            current_time = time.time()
+            runtime = current_time - self.stats["start_time"]
+
+            # Calculate sync rate
+            if runtime > 0:
+                self.stats["sync_rate"] = self.stats["successful_syncs"] / runtime
+
+            return {
+                "runtime_seconds": runtime,
+                "total_sensors": len(self.sensors),
+                "active_sensors": len(self.active_sensors),
+                "sensor_groups": len(self.sensor_groups),
+                "sync_operations": {
+                    "total": self.stats["total_sync_operations"],
+                    "successful": self.stats["successful_syncs"],
+                    "failed": self.stats["failed_syncs"],
+                    "success_rate": self.stats["successful_syncs"] / max(1, self.stats["total_sync_operations"]) * 100,
+                    "rate_per_second": self.stats["sync_rate"],
+                },
+                "sensor_status": {
+                    sensor_id: {
+                        "status": self.sync_status.get(sensor_id, "unknown"),
+                        "is_active": sensor_id in self.active_sensors,
+                        "buffer_size": self.global_buffer[sensor_id].size(),
+                    }
+                    for sensor_id in self.sensors.keys()
+                },
+                "group_status": {
+                    group_id: {
+                        "sensor_count": len(group.sensor_ids),
+                        "active_sensors": len([sid for sid in group.sensor_ids if sid in self.active_sensors]),
+                        "sync_method": group.sync_method.value,
+                        "sync_tolerance": group.sync_tolerance,
+                    }
+                    for group_id, group in self.sensor_groups.items()
+                }
             }
-            for sensor_id, buffer in self.data_buffer.items()
-        }
 
-    async def clear_buffers(self):
-        """清空所有缓冲区"""
-        async with self.buffer_lock:
-            for buffer in self.data_buffer.values():
-                buffer.clear()
-        logger.info("传感器数据缓冲区已清空")
+    def _start_synchronization(self) -> None:
+        """Start synchronization threads."""
+        if self._monitoring_thread and self._monitoring_thread.is_alive():
+            return
 
-    async def shutdown(self):
-        """关闭所有传感器"""
-        await self.stop_collection()
+        self._sync_stop_event.clear()
+        self._monitoring_thread = threading.Thread(
+            target=self._synchronization_loop,
+            name="SensorSyncManager",
+            daemon=True
+        )
+        self._monitoring_thread.start()
+        logger.info("Started sensor synchronization")
 
-        # 关闭所有传感器
-        shutdown_tasks = [
-            asyncio.create_task(sensor.shutdown())
-            for sensor in self.sensors.values()
-        ]
+    def _stop_synchronization(self) -> None:
+        """Stop synchronization threads."""
+        self._sync_stop_event.set()
+        if self._monitoring_thread:
+            self._monitoring_thread.join(timeout=2.0)
+        self._sync_executor.shutdown(wait=True)
+        logger.info("Stopped sensor synchronization")
 
-        if shutdown_tasks:
-            await asyncio.gather(*shutdown_tasks, return_exceptions=True)
+    def _synchronization_loop(self) -> None:
+        """Main synchronization loop."""
+        logger.info("Sensor synchronization loop started")
 
-        self.sensors.clear()
-        await self.clear_buffers()
+        while not self._sync_stop_event.is_set():
+            try:
+                current_time = time.time()
 
-        logger.info("AsyncBatchedSensorManager 已关闭")
+                # Synchronize each group
+                for group_id, group in self.sensor_groups.items():
+                    if self._can_synchronize_group(group, current_time):
+                        self._sync_executor.submit(self._synchronize_group, group, current_time)
 
+                # Sleep for next cycle
+                self._sync_stop_event.wait(0.01)  # 100 Hz sync attempt rate
 
-# 向后兼容的SensorManager
-class SensorManager(AsyncBatchedSensorManager):
-    """
-    向后兼容的传感器管理器
-    """
-    pass  # 继承自AsyncBatchedSensorManager
+            except Exception as e:
+                logger.error(f"Error in synchronization loop: {e}")
+
+        logger.info("Sensor synchronization loop ended")
+
+    def _can_synchronize_group(self, group: SensorGroup, current_time: float) -> bool:
+        """
+        Check if a group can be synchronized.
+
+        Args:
+            group: Sensor group to check
+            current_time: Current timestamp
+
+        Returns:
+            True if group can be synchronized
+        """
+        # Check if enough sensors are active
+        active_sensors_in_group = group.sensor_ids.intersection(self.active_sensors)
+        if len(active_sensors_in_group) < 2:
+            return False
+
+        # Check if we have recent data from all sensors
+        for sensor_id in active_sensors_in_group:
+            buffer = self.global_buffer[sensor_id]
+            latest_data = buffer.get_latest(1)
+            if not latest_data:
+                return False
+
+            # Check data recency
+            packet = latest_data[0]
+            if current_time - packet.timestamp > self.max_sync_window:
+                return False
+
+        return True
+
+    def _synchronize_group(self, group: SensorGroup, target_time: float) -> Optional[SynchronizedDataPacket]:
+        """
+        Synchronize a sensor group around target time.
+
+        Args:
+            group: Sensor group to synchronize
+            target_time: Target synchronization time
+
+        Returns:
+            Synchronized data packet or None if synchronization failed
+        """
+        try:
+            self.stats["total_sync_operations"] += 1
+
+            # Collect data for each sensor
+            sensor_packets = {}
+            timestamp_deltas = []
+
+            for sensor_id in group.sensor_ids:
+                if sensor_id not in self.active_sensors:
+                    continue
+
+                # Find best data packet around target time
+                buffer = self.global_buffer[sensor_id]
+                time_window = group.sync_tolerance
+
+                best_packet = self._find_closest_packet(buffer, target_time, time_window)
+                if best_packet:
+                    sensor_packets[sensor_id] = best_packet
+                    timestamp_deltas.append(abs(best_packet.timestamp - target_time))
+
+            # Check if we have enough sensors for synchronization
+            if len(sensor_packets) < 2:
+                self.stats["failed_syncs"] += 1
+                return None
+
+            # Calculate synchronization quality
+            max_delta = max(timestamp_deltas) if timestamp_deltas else float('inf')
+            avg_delta = np.mean(timestamp_deltas) if timestamp_deltas else 0
+
+            # Quality based on timestamp alignment
+            sync_quality = max(0.0, 1.0 - max_delta / group.sync_tolerance)
+
+            # Create synchronized packet
+            synced_packet = SynchronizedDataPacket(
+                timestamp=target_time,
+                sensor_packets=sensor_packets,
+                sync_quality=sync_quality,
+                sync_method=group.sync_method,
+                group_id=group.group_id,
+                max_timestamp_delta=max_delta,
+                avg_timestamp_delta=avg_delta
+            )
+
+            # Store synchronized packet
+            with self._sync_lock:
+                self.sync_buffers[group.group_id].append(synced_packet)
+
+                # Notify callbacks
+                for callback in self._sync_callbacks:
+                    try:
+                        callback(synced_packet)
+                    except Exception as e:
+                        logger.error(f"Error in sync callback: {e}")
+
+            self.stats["successful_syncs"] += 1
+
+            # Update sync status
+            for sensor_id in sensor_packets.keys():
+                self.sync_status[sensor_id] = SensorSyncStatus.SYNCHRONIZED
+
+            return synced_packet
+
+        except Exception as e:
+            logger.error(f"Error synchronizing group {group.group_id}: {e}")
+            self.stats["failed_syncs"] += 1
+            return None
+
+    def _find_closest_packet(self, buffer: SensorDataBuffer, target_time: float,
+                           time_window: float) -> Optional[SensorDataPacket]:
+        """
+        Find the packet closest to target time within window.
+
+        Args:
+            buffer: Sensor data buffer
+            target_time: Target timestamp
+            time_window: Time window to search
+
+        Returns:
+            Closest data packet or None if none found
+        """
+        # Get packets in time window
+        start_time = target_time - time_window
+        end_time = target_time + time_window
+
+        packets = buffer.get_by_timerange(start_time, end_time)
+        if not packets:
+            return None
+
+        # Find closest packet
+        closest_packet = min(packets, key=lambda p: abs(p.timestamp - target_time))
+        return closest_packet
+
+    def _on_sensor_data(self, packet: SensorDataPacket) -> None:
+        """
+        Callback for receiving data from sensors.
+
+        Args:
+            packet: Sensor data packet
+        """
+        # Add to global buffer
+        self.global_buffer[packet.sensor_id].add(packet)
+
+        # Update sensor sync status
+        if packet.sensor_id in self.sync_status:
+            if self.sync_status[packet.sensor_id] == SensorSyncStatus.OFFLINE:
+                self.sync_status[packet.sensor_id] = SensorSyncStatus.CALIBRATING
+
+    def _get_processing_times(self, sensor_id: str) -> List[float]:
+        """Get recent processing times for a sensor."""
+        # This would track processing times in a real implementation
+        return [0.05]  # Placeholder
+
+    def _generate_quality_recommendations(self, quality: float, completeness: float,
+                                        timeliness: float) -> List[str]:
+        """Generate recommendations based on quality assessment."""
+        recommendations = []
+
+        if quality < 0.5:
+            recommendations.append("Check sensor calibration and alignment")
+
+        if completeness < 0.7:
+            recommendations.append("Verify sensor power and connections")
+
+        if timeliness < 0.7:
+            recommendations.append("Check processing pipeline performance")
+
+        return recommendations
+
+    def __del__(self):
+        """Cleanup when manager is destroyed."""
+        self.stop_sensors()
+        self.stop_synchronization()

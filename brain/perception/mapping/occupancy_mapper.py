@@ -162,36 +162,46 @@ class OccupancyMapper:
         world_cam_y = robot_y + cam_x * sin_yaw + cam_y * cos_yaw
         world_cam_yaw = robot_yaw + cam_yaw
         
-        # 遍历深度图像素
-        for v in range(0, h, 2):  # 降采样以提高速度
-            for u in range(0, w, 2):
-                depth = depth_image[v, u]
-                
-                # 过滤无效深度
-                if depth < self.min_depth or depth > self.max_depth:
-                    continue
-                
-                # 计算3D点（相机坐标系）
-                z = depth
-                x = (u - self.camera_cx) * z / self.camera_fx
-                y = (v - self.camera_cy) * z / self.camera_fy
-                
-                # 转换到世界坐标系
-                cos_cam = math.cos(world_cam_yaw)
-                sin_cam = math.sin(world_cam_yaw)
-                world_x = world_cam_x + x * cos_cam - y * sin_cam
-                world_y = world_cam_y + x * sin_cam + y * cos_cam
-                
-                # 更新占据栅格
-                gx, gy = self.grid.world_to_grid(world_x, world_y)
-                if self.grid.is_valid(gx, gy):
-                    self.grid.set_cell(gx, gy, CellState.OCCUPIED)
-                
-                # 更新从相机到障碍物之间的自由空间
-                self._update_free_space(
-                    (world_cam_x, world_cam_y),
-                    (world_x, world_y)
-                )
+        # 优化：使用向量化操作处理深度图
+        # 创建降采样索引
+        v_indices = np.arange(0, h, 2)
+        u_indices = np.arange(0, w, 2)
+        vv, uu = np.meshgrid(v_indices, u_indices, indexing='ij')
+        
+        # 向量化提取深度值
+        depths = depth_image[vv, uu]
+        
+        # 向量化过滤有效深度
+        valid_mask = (depths >= self.min_depth) & (depths <= self.max_depth)
+        valid_depths = depths[valid_mask]
+        valid_u = uu[valid_mask]
+        valid_v = vv[valid_mask]
+        
+        if len(valid_depths) == 0:
+            return
+        
+        # 向量化计算3D点（相机坐标系）
+        z_values = valid_depths
+        x_values = (valid_u - self.camera_cx) * z_values / self.camera_fx
+        y_values = (valid_v - self.camera_cy) * z_values / self.camera_fy
+        
+        # 向量化转换到世界坐标系
+        cos_cam = math.cos(world_cam_yaw)
+        sin_cam = math.sin(world_cam_yaw)
+        world_x_values = world_cam_x + x_values * cos_cam - y_values * sin_cam
+        world_y_values = world_cam_y + x_values * sin_cam + y_values * cos_cam
+        
+        # 批量更新占据栅格
+        for world_x, world_y in zip(world_x_values, world_y_values):
+            gx, gy = self.grid.world_to_grid(world_x, world_y)
+            if self.grid.is_valid(gx, gy):
+                self.grid.set_cell(gx, gy, CellState.OCCUPIED)
+            
+            # 更新从相机到障碍物之间的自由空间
+            self._update_free_space(
+                (world_cam_x, world_cam_y),
+                (world_x, world_y)
+            )
     
     def update_from_laser(
         self,
@@ -293,7 +303,7 @@ class OccupancyMapper:
         start: Tuple[float, float],
         end: Tuple[float, float]
     ):
-        """更新从起点到终点之间的自由空间"""
+        """更新从起点到终点之间的自由空间（优化的Bresenham算法）"""
         sx, sy = start
         ex, ey = end
         
@@ -301,7 +311,11 @@ class OccupancyMapper:
         gx1, gy1 = self.grid.world_to_grid(sx, sy)
         gx2, gy2 = self.grid.world_to_grid(ex, ey)
         
-        # 简化的直线遍历
+        # 优化：如果起点和终点相同，跳过
+        if gx1 == gx2 and gy1 == gy2:
+            return
+        
+        # 优化的Bresenham算法实现
         dx = abs(gx2 - gx1)
         dy = abs(gy2 - gy1)
         sx_step = 1 if gx1 < gx2 else -1
@@ -309,19 +323,21 @@ class OccupancyMapper:
         err = dx - dy
         
         x, y = gx1, gy1
+        
+        # 优化：预先计算终点，避免重复检查
+        # 不更新终点（那是障碍物），所以循环到终点前一个点
         while True:
-            # 不更新终点（那是障碍物）
+            # 检查是否到达终点（不更新终点）
             if x == gx2 and y == gy2:
                 break
             
-            if self.grid.is_valid(x, y):
-                # 只标记未知或占据的为自由（不覆盖已标记的自由）
-                if self.grid.get_cell(x, y) == CellState.UNKNOWN:
-                    self.grid.set_cell(x, y, CellState.FREE)
+            # 优化：批量检查有效性，减少函数调用
+            if 0 <= x < self.grid.width and 0 <= y < self.grid.height:
+                # 优化：直接访问grid.data，避免函数调用开销
+                if self.grid.data[y, x] == CellState.UNKNOWN:
+                    self.grid.data[y, x] = CellState.FREE
             
-            if x == gx2 and y == gy2:
-                break
-            
+            # Bresenham算法步进
             e2 = 2 * err
             if e2 > -dy:
                 err -= dy
