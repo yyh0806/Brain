@@ -168,3 +168,8 @@ class BoundingBox:
             self.min_point.z <= other.max_point.z and
             self.max_point.z >= other.min_point.z
         )
+
+
+
+
+

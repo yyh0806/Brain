@@ -509,3 +509,8 @@ class BeliefRevisionPolicy:
             "total_successes": total_successes,
             "last_decay_update": self.last_decay_update.isoformat()
         }
+
+
+
+
+

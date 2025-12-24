@@ -96,3 +96,8 @@ class ReasoningResult:
         
         return "\n".join(lines)
 
+
+
+
+
+

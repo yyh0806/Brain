@@ -181,7 +181,31 @@ class CognitiveLayer:
         self.dialogue_manager = dialogue_manager
         self.perception_monitor = perception_monitor
         
+        # 初始化VLM感知器
+        self.vlm = None
+        self._init_vlm()
+        
+        # 感知管理器（将由Brain传入）
+        self._sensor_manager = None
+        
         logger.info("CognitiveLayer 初始化完成")
+    
+    def _init_vlm(self):
+        """初始化VLM感知器"""
+        try:
+            from brain.perception.vlm.vlm_perception import VLMPerception, OLLAMA_AVAILABLE
+            
+            if OLLAMA_AVAILABLE:
+                self.vlm = VLMPerception(
+                    model=self.config.get("vlm.model", "llava:7b"),
+                    ollama_host=self.config.get("vlm.ollama_host", "http://localhost:11434")
+                )
+                logger.info("VLM感知器已初始化 (ollama:llava:7b)")
+            else:
+                logger.warning("Ollama不可用，VLM功能受限")
+        except Exception as e:
+            logger.warning(f"VLM初始化失败: {e}")
+            self.vlm = None
     
     async def process_perception(
         self, 
@@ -208,6 +232,45 @@ class CognitiveLayer:
         
         # 更新世界模型
         changes = self.world_model.update_from_perception(perception_data)
+        
+        # VLM场景理解（如果有RGB图像且VLM可用）
+        if perception_data and perception_data.rgb_image is not None and self.vlm is not None:
+            try:
+                import numpy as np
+                # 确保图像是numpy数组
+                rgb_image = perception_data.rgb_image
+                if isinstance(rgb_image, np.ndarray):
+                    scene = await self.vlm.analyze_scene(rgb_image)
+                    # 更新语义对象到WorldModel
+                    if hasattr(scene, 'objects') and scene.objects:
+                        for obj in scene.objects:
+                            # 创建追踪对象ID
+                            obj_id = f"vlm_{obj.label}_{len(self.world_model.tracked_objects)}"
+                            
+                            # 更新追踪对象
+                            position = {}
+                            if obj.bbox:
+                                position = {
+                                    "x": obj.bbox.x,
+                                    "y": obj.bbox.y,
+                                    "z": 0.0
+                                }
+                            
+                            self.world_model.update_tracked_object(
+                                obj_id,
+                                label=obj.label,
+                                position=position if position else {"x": 0.5, "y": 0.5, "z": 0.0},
+                                attributes={
+                                    "confidence": obj.confidence,
+                                    "source": "vlm"
+                                }
+                            )
+                        
+                        logger.info(f"VLM分析完成: 检测到{len(scene.objects)}个对象")
+                else:
+                    logger.warning("RGB图像不是numpy数组，跳过VLM分析")
+            except Exception as e:
+                logger.warning(f"VLM分析失败: {e}")
         
         # 获取规划上下文
         planning_context = self.world_model.get_context_for_planning()
@@ -389,4 +452,8 @@ class CognitiveLayer:
             raise ValueError("PerceptionMonitor 未初始化")
         
         logger.info("停止感知监控")
+
+
+
+
 

@@ -267,3 +267,8 @@ def set_performance_monitor(monitor: PerformanceMonitor):
     """设置全局性能监控器实例"""
     global _global_monitor
     _global_monitor = monitor
+
+
+
+
+
