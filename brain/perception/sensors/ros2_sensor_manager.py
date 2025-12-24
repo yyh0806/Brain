@@ -538,7 +538,7 @@ class ROS2SensorManager:
             "active_sensors": sum(1 for status in self.sensor_status.values() if status.connected),
             "enabled_sensors": sum(1 for status in self.sensor_status.values() if status.enabled),
             "data_history_size": len(self._data_history),
-            "last_update": str(self._last_perception.timestamp) if self._last_perception else "N/A",
+            "last_update": str(self._latest_data.timestamp) if self._latest_data else "N/A",
             "sensor_types": {s.name: status.connected for s, status in self.sensor_status.items()},
             "ros2_interface_initialized": self.ros2_interface._initialized if hasattr(self.ros2_interface, '_initialized') else False
         }
