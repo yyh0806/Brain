@@ -148,6 +148,8 @@ class ROS2SensorManager:
         config: Optional[Dict[str, Any]] = None
     ):
         self.ros2 = ros2_interface
+        # 公共属性用于测试框架
+        self.ros2_interface_for_test = ros2_interface
         self.config = config or {}
         
         # 传感器状态
