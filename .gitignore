@@ -48,3 +48,62 @@ examples/data/processed/
 # 临时文件
 temp/
 tmp/
+
+# Isaac Sim 相关文件
+*isaac*
+*Isaac*
+ISAAC*
+isaac_sim*
+enable_isaac_web.py
+isaac_sim_backup.html
+isaac_sim_solutions.py
+ISaac_Sim_Ultra_Solution_Guide.md
+Isaac_Sim_Connection_Reset_Solution.md
+launch_isaac_gui.py
+start_isaac_gui_complete.sh
+isaac_config.toml
+test_isaac_sim_connection.py
+isaac_control_panel.html
+isaac_webrtc_client.html
+simple_isaac_controller.py
+isaac_sim_usage_guide.md
+isaac_sim_web_controller.py
+
+# Isaac 相关目录
+isaac-sim-data/
+isaac-sim-workspace/
+
+# Isaac 相关配置文件
+config/environments/simulation/isaac_sim.yaml
+config/docker/isaac_sim_docker_config.yaml
+scripts/setup_isaac_sim.sh
+scripts/create_isaac_sim_scene.py
+scripts/build_isaac_sim_docker.sh
+brain/platforms/isaac_sim_interface.py
+
+# 其他 Isaac 相关文件
+fix_isaac_web_ultimate.py
+enable_isaac_http_server.py
+start_isaac_with_gui.py
+examples/isaac_sim_demo.py
+examples/world_model_isaac_integration.py
+docs/perception/isaac_sim_integration.md
+docs/guides/docker_isaac_sim_guide.md
+
+# 根目录下的脚本文件（保留scripts/目录内的脚本）
+*.sh
+
+# 测试和开发工具文件
+tools/development/*.py
+!tools/development/README.md
+testing_framework_dev
+
+# 日志文件
+*.log
+logs/
+
+# 数据和输出文件
+*.html
+*.json
+!config/**/*.json
+!data/**/*.json

@@ -139,8 +139,9 @@ async def demo_basic_perception_planning():
     print("="*70)
     
     from brain.cognitive.world_model import WorldModel
-    from brain.cognitive.cot_engine import CoTEngine, ReasoningMode
-    from brain.cognitive.dialogue_manager import DialogueManager
+    from brain.cognitive.reasoning.cot_engine import CoTEngine
+    from brain.cognitive.reasoning.reasoning_result import ReasoningMode
+    from brain.cognitive.dialogue.dialogue_manager import DialogueManager
     
     # 创建组件
     world_model = WorldModel()
@@ -214,7 +215,7 @@ async def demo_perception_driven_replan():
     
     from brain.cognitive.world_model import WorldModel, ChangeType
     from brain.cognitive.cot_engine import CoTEngine, ReasoningMode
-    from brain.cognitive.perception_monitor import PerceptionMonitor
+    from brain.cognitive.monitoring.perception_monitor import PerceptionMonitor
     from brain.cognitive.dialogue_manager import DialogueManager
     
     # 创建组件
@@ -387,7 +388,8 @@ async def demo_cot_reasoning():
     print("📌 演示4: CoT链式思维推理")
     print("="*70)
     
-    from brain.cognitive.cot_engine import CoTEngine, ReasoningMode, ComplexityLevel
+    from brain.cognitive.reasoning.cot_engine import CoTEngine
+    from brain.cognitive.reasoning.reasoning_result import ReasoningMode, ComplexityLevel
     
     cot_engine = CoTEngine()
     
@@ -447,9 +449,10 @@ async def demo_full_integration():
     print("="*70)
     
     from brain.cognitive.world_model import WorldModel
-    from brain.cognitive.cot_engine import CoTEngine, ReasoningMode
-    from brain.cognitive.dialogue_manager import DialogueManager
-    from brain.cognitive.perception_monitor import PerceptionMonitor
+    from brain.cognitive.reasoning.cot_engine import CoTEngine
+    from brain.cognitive.reasoning.reasoning_result import ReasoningMode
+    from brain.cognitive.dialogue.dialogue_manager import DialogueManager
+    from brain.cognitive.monitoring.perception_monitor import PerceptionMonitor
     from brain.llm.cot_prompts import CoTPrompts
     
     # 创建所有组件

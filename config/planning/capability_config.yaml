@@ -1,0 +1,206 @@
+# 指令能力配置
+# 定义所有可用的操作能力及其约束
+
+capabilities:
+  # 移动操作
+  - name: move_to
+    type: movement
+    description: 移动到指定位置
+    parameters:
+      required: [position]
+      optional: [speed, heading]
+    preconditions:
+      - robot.ready == True
+    postconditions:
+      - robot.position.near(target_position)
+    platforms: [drone, ugv, usv]
+    default_duration: 30.0
+    
+  - name: goto
+    type: movement
+    description: 前往指定位置（move_to的别名）
+    parameters:
+      required: [position]
+      optional: [speed, heading]
+    preconditions:
+      - robot.ready == True
+    postconditions:
+      - robot.position.near(target_position)
+    platforms: [drone, ugv, usv]
+    default_duration: 30.0
+    
+  # 操作类任务
+  - name: grasp
+    type: manipulation
+    description: 抓取物体
+    parameters:
+      required: [object_id]
+      optional: [grip_force]
+    preconditions:
+      - object.visible == True
+      - robot.position.near(object.position)
+      - robot.has_manipulator == True
+    postconditions:
+      - robot.holding(object_id)
+    platforms: [ugv]
+    default_duration: 10.0
+    
+  - name: pickup
+    type: manipulation
+    description: 拾取物体（grasp的别名）
+    parameters:
+      required: [object_id]
+      optional: [grip_force]
+    preconditions:
+      - object.visible == True
+      - robot.position.near(object.position)
+      - robot.has_manipulator == True
+    postconditions:
+      - robot.holding(object_id)
+    platforms: [ugv]
+    default_duration: 10.0
+    
+  - name: place
+    type: manipulation
+    description: 放置物体
+    parameters:
+      required: [position]
+      optional: [release_height]
+    preconditions:
+      - robot.holding(object_id)
+      - robot.position.near(target_position)
+    postconditions:
+      - robot.holding == None
+      - object.position == target_position
+    platforms: [ugv]
+    default_duration: 10.0
+    
+  - name: dropoff
+    type: manipulation
+    description: 放下物体（place的别名）
+    parameters:
+      required: [position]
+      optional: [release_height]
+    preconditions:
+      - robot.holding(object_id)
+      - robot.position.near(target_position)
+    postconditions:
+      - robot.holding == None
+      - object.position == target_position
+    platforms: [ugv]
+    default_duration: 10.0
+    
+  # 室内操作
+  - name: open_door
+    type: manipulation
+    description: 开门
+    parameters:
+      required: [door_id]
+      optional: [force]
+    preconditions:
+      - door.state == "closed"
+      - robot.position.near(door.position)
+      - robot.has_manipulator == True
+    postconditions:
+      - door.state == "open"
+    platforms: [ugv]
+    default_duration: 5.0
+    
+  - name: close_door
+    type: manipulation
+    description: 关门
+    parameters:
+      required: [door_id]
+    preconditions:
+      - door.state == "open"
+      - robot.position.near(door.position)
+      - robot.has_manipulator == True
+    postconditions:
+      - door.state == "closed"
+    platforms: [ugv]
+    default_duration: 5.0
+    
+  - name: check_door_status
+    type: perception
+    description: 检查门状态
+    parameters:
+      required: [door_id]
+    preconditions:
+      - robot.has_perception_capability == True
+    postconditions:
+      - door.status.known == True
+    platforms: [drone, ugv]
+    default_duration: 2.0
+    
+  # 感知操作
+  - name: search_object
+    type: perception
+    description: 搜索物体
+    parameters:
+      required: [object_type]
+      optional: [area, max_attempts]
+    preconditions:
+      - robot.has_perception_capability == True
+    postconditions:
+      - object_location.known OR search_exhausted
+    platforms: [drone, ugv]
+    default_duration: 10.0
+    
+  - name: query_object_location
+    type: perception
+    description: 查询物体位置
+    parameters:
+      required: [object_id]
+    preconditions:
+      - world_model.has_object_info == True
+    postconditions:
+      - object_location.queried == True
+    platforms: [drone, ugv]
+    default_duration: 1.0
+    
+  - name: scan_area
+    type: perception
+    description: 扫描区域
+    parameters:
+      required: [area]
+      optional: [resolution]
+    preconditions:
+      - robot.has_perception_capability == True
+    postconditions:
+      - area.scanned == True
+    platforms: [drone, ugv]
+    default_duration: 30.0
+    
+  - name: detect_objects
+    type: perception
+    description: 检测物体
+    parameters:
+      required: [object_types]
+      optional: [area]
+    preconditions:
+      - robot.has_perception_capability == True
+    postconditions:
+      - objects.detected == True
+    platforms: [drone, ugv]
+    default_duration: 5.0
+    
+  # 控制操作
+  - name: wait
+    type: control
+    description: 等待
+    parameters:
+      required: [duration]
+    preconditions: []
+    postconditions: []
+    platforms: [drone, ugv, usv]
+    default_duration: 0.0  # 由参数决定
+    
+  - name: check_status
+    type: perception
+    description: 检查状态
+    parameters: []
+    preconditions: []
+    postconditions:
+      - robot.status.checked == True
+    platforms: [drone, ugv, usv]
+    default_duration: 0.5

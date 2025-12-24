@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from loguru import logger
 
+from brain.perception.utils.coordinates import quaternion_to_euler, normalize_angles
+
 
 @dataclass
 class FusedPose:
@@ -105,7 +107,7 @@ class EKFPoseFusion:
         # 四元数转欧拉角
         q = (orient.get("x", 0), orient.get("y", 0),
              orient.get("z", 0), orient.get("w", 1))
-        roll, pitch, yaw = self._quat_to_euler(q)
+        roll, pitch, yaw = quaternion_to_euler(q)
         z_orient = np.array([roll, pitch, yaw])
         
         z = np.concatenate([z_pos, z_orient])
@@ -133,7 +135,7 @@ class EKFPoseFusion:
         # 状态更新
         y = z - H @ self.state
         # 角度归一化
-        y[3:6] = self._normalize_angles(y[3:6])
+        y[3:6] = normalize_angles(y[3:6])
         
         self.state = self.state + K @ y
         
@@ -155,7 +157,7 @@ class EKFPoseFusion:
         # 四元数转欧拉角
         q = (orient.get("x", 0), orient.get("y", 0),
              orient.get("z", 0), orient.get("w", 1))
-        roll, pitch, yaw = self._quat_to_euler(q)
+        roll, pitch, yaw = quaternion_to_euler(q)
         
         # IMU只更新姿态（roll, pitch）和角速度
         # yaw受磁场影响可能不准确
@@ -173,7 +175,7 @@ class EKFPoseFusion:
         
         # 状态更新
         y = z - H @ self.state
-        y = self._normalize_angles(y)
+        y = normalize_angles(y)
         
         self.state = self.state + K @ y
         
@@ -205,29 +207,6 @@ class EKFPoseFusion:
         """获取速度 (线速度, 角速度)"""
         return self.state[6:9].copy(), self.state[9:12].copy()
     
-    def _quat_to_euler(self, q: Tuple[float, float, float, float]) -> Tuple[float, float, float]:
-        """四元数转欧拉角"""
-        x, y, z, w = q
-        
-        sinr_cosp = 2 * (w * x + y * z)
-        cosr_cosp = 1 - 2 * (x * x + y * y)
-        roll = math.atan2(sinr_cosp, cosr_cosp)
-        
-        sinp = 2 * (w * y - z * x)
-        if abs(sinp) >= 1:
-            pitch = math.copysign(math.pi / 2, sinp)
-        else:
-            pitch = math.asin(sinp)
-        
-        siny_cosp = 2 * (w * z + x * y)
-        cosy_cosp = 1 - 2 * (y * y + z * z)
-        yaw = math.atan2(siny_cosp, cosy_cosp)
-        
-        return roll, pitch, yaw
-    
-    def _normalize_angles(self, angles: np.ndarray) -> np.ndarray:
-        """归一化角度到 [-pi, pi]"""
-        return np.arctan2(np.sin(angles), np.cos(angles))
 
 
 class DepthRGBFusion:
