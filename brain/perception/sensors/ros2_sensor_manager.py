@@ -542,6 +542,6 @@ class ROS2SensorManager:
             "data_history_size": len(self._data_history),
             "last_update": str(self._latest_data.timestamp) if self._latest_data else "N/A",
             "sensor_types": {s.name: status.connected for s, status in self.sensor_status.items()},
-            "ros2_interface_initialized": self.ros2_interface._initialized if hasattr(self.ros2_interface, '_initialized') else False
+            "ros2_interface_initialized": self.ros2._initialized if hasattr(self.ros2, '_initialized') else False
         }
 
