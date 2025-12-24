@@ -121,3 +121,6 @@ class CircuitBreaker:
             "last_failure_time": self.last_failure_time.isoformat() if self.last_failure_time else None,
             "opened_at": self.opened_at.isoformat() if self.opened_at else None
         }
+
+
+

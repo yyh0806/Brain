@@ -22,6 +22,8 @@ from brain.planning.task.task_planner import TaskPlanner
 from brain.execution.executor import Executor
 from brain.core.monitor import SystemMonitor
 from brain.perception.sensors.sensor_manager import MultiSensorManager as SensorManager
+from brain.perception.sensors.ros2_sensor_manager import ROS2SensorManager
+from brain.communication.ros2_interface import ROS2Interface, ROS2Config
 # EnvironmentModel 已删除，功能合并到 WorldModel
 from brain.models.llm_interface import LLMInterface
 from brain.models.task_parser import TaskParser
@@ -110,6 +112,7 @@ class Brain:
         
         # 感知监控任务
         self._perception_monitor_task: Optional[asyncio.Task] = None
+        self._running = True
         
         logger.info(f"Brain [{self.id}] 初始化完成 (感知驱动模式)")
         self.status = BrainStatus.READY
@@ -123,13 +126,24 @@ class Brain:
             self.config.get("state.checkpoint_path", "./data/checkpoints")
         )
         
-        # 感知系统
-        self.sensor_manager = SensorManager(self.config.get("perception", {}))
-        # EnvironmentModel 已删除，功能合并到 WorldModel
-        
-        # LLM接口
+        # LLM接口（需要先初始化）
         self.llm = LLMInterface(self.config.get("llm", {}))
         self.task_parser = TaskParser(self.llm)
+        
+        # 先初始化ROS2接口（同步初始化）
+        comm_config = self.config.get("communication", {})
+        # 创建ROS2Config对象，过滤不支持的参数
+        ros2_config = ROS2Config(
+            node_name=comm_config.get("node_name", "brain_node"),
+            topics=comm_config.get("topics", {})
+        )
+        self.ros2 = ROS2Interface(ros2_config)
+        
+        # 感知系统 - 使用ROS2SensorManager并传入ROS2接口
+        self.sensor_manager = ROS2SensorManager(
+            ros2_interface=self.ros2,
+            config=self.config.get("perception", {})
+        )
         
         # 规划与执行
         self.planner = TaskPlanner(
@@ -201,6 +215,14 @@ class Brain:
             dialogue_manager=self.dialogue,
             perception_monitor=self.perception_monitor,
             config=self.config.get("cognitive", {})
+        )
+        
+        # 将ROS2SensorManager传入认知层
+        self.cognitive_layer._sensor_manager = self.sensor_manager
+        
+        # 启动感知数据监控和更新任务
+        self._perception_update_task = asyncio.create_task(
+            self._update_perception_loop()
         )
         
         logger.info("认知模块初始化完成（使用统一接口）")
@@ -1045,10 +1067,72 @@ class Brain:
             all_history.extend(mission.reasoning_chain)
         return all_history
     
+    async def _update_perception_loop(self):
+        """持续更新感知数据到认知层"""
+        from brain.perception.vlm.vlm_perception import OLLAMA_AVAILABLE
+        
+        while self._running:
+            try:
+                # 从ROS2SensorManager获取融合数据
+                perception_data = await self.sensor_manager.get_fused_perception()
+                
+                # 更新WorldModel - 机器人位置
+                if perception_data and perception_data.pose:
+                    self.cognitive_world_model.robot_position = {
+                        "x": perception_data.pose.x if hasattr(perception_data.pose, 'x') else 0.0,
+                        "y": perception_data.pose.y if hasattr(perception_data.pose, 'y') else 0.0,
+                        "z": perception_data.pose.z if hasattr(perception_data.pose, 'z') else 0.0,
+                        "lat": 0.0,
+                        "lon": 0.0,
+                        "alt": 0.0
+                    }
+                
+                # 更新占据栅格地图
+                if perception_data and perception_data.occupancy_grid is not None:
+                    self.cognitive_world_model.current_map = perception_data.occupancy_grid
+                    self.cognitive_world_model.map_resolution = perception_data.grid_resolution
+                    self.cognitive_world_model.map_origin = perception_data.grid_origin
+                    logger.debug(f"更新占据地图: shape={perception_data.occupancy_grid.shape}")
+                
+                # VLM场景理解（如果有RGB图像且VLM可用）
+                if perception_data and perception_data.rgb_image is not None:
+                    # 检查认知层是否有VLM
+                    if hasattr(self.cognitive_layer, 'vlm') and self.cognitive_layer.vlm is not None and OLLAMA_AVAILABLE:
+                        try:
+                            import numpy as np
+                            # 确保图像是numpy数组
+                            rgb_image = perception_data.rgb_image
+                            if not isinstance(rgb_image, np.ndarray):
+                                logger.warning("RGB图像不是numpy数组，跳过VLM分析")
+                            else:
+                                scene = await self.cognitive_layer.vlm.analyze_scene(rgb_image)
+                                # 更新语义对象到WorldModel
+                                if hasattr(scene, 'objects') and scene.objects:
+                                    for obj in scene.objects:
+                                        self.cognitive_world_model.add_tracked_object(obj)
+                        except Exception as e:
+                            logger.warning(f"VLM场景分析失败: {e}")
+                
+                # 等待一段时间再更新（避免占用过多CPU）
+                await asyncio.sleep(0.1)
+                
+            except Exception as e:
+                logger.error(f"感知数据更新异常: {e}")
+                await asyncio.sleep(1.0)
+    
     async def shutdown(self):
         """关闭系统"""
         logger.info("Brain 系统关闭中...")
         self.status = BrainStatus.SHUTDOWN
+        
+        # 停止感知监控任务
+        self._running = False
+        if self._perception_update_task is not None:
+            self._perception_update_task.cancel()
+            try:
+                await self._perception_update_task
+            except asyncio.CancelledError:
+                pass
         
         # 停止感知监控
         await self.perception_monitor.stop_monitoring()
@@ -1061,6 +1145,10 @@ class Brain:
         
         # 关闭连接
         await self.robot_interface.disconnect()
+        
+        # 关闭ROS2接口
+        if hasattr(self, 'ros2') and self.ros2 is not None:
+            await self.ros2.shutdown()
         
         logger.info("Brain 系统已关闭")
 

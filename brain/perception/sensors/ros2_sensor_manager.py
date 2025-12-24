@@ -19,7 +19,7 @@ import math
 from loguru import logger
 
 from brain.communication.ros2_interface import ROS2Interface, SensorData, ROS2Config
-from brain.perception.occupancy_mapper import OccupancyMapper
+from brain.perception.mapping.occupancy_mapper import OccupancyMapper
 from brain.perception.utils.coordinates import quaternion_to_euler, transform_local_to_world
 from brain.perception.utils.math_utils import angle_to_direction, compute_laser_angles
 from brain.perception.data_models import Pose2D, Pose3D, Velocity

@@ -157,6 +157,10 @@ class MultiSensorManager:
         self.sensors: Dict[str, BaseSensor] = {}
         self.sensor_configs: Dict[str, SensorConfig] = {}
         self.sensor_groups: Dict[str, SensorGroup] = {}
+        
+        # PointCloud2 subscription for Nova Carter
+        self.pointcloud_subscriber = None
+        self.pointcloud_config = None
         self.active_sensors: Set[str] = set()
 
         # Data buffering

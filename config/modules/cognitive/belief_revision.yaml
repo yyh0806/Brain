@@ -19,3 +19,6 @@ belief_revision:
   # 观测更新
   observation_boost: 0.15  # 新观测提高的置信度
   observation_decay_time: 300.0  # 观测失效时间（秒），超过此时间未观测则开始衰减
+
+
+

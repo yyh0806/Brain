@@ -1,0 +1,61 @@
+# Nova Carter ROS2 配置文件
+# 用于 Isaac Sim 中的 Nova Carter 机器人
+
+ros2_interface:
+  node_name: "brain_nova_carter"
+  mode: "real"
+  
+  # Nova Carter 官方示例的话题映射
+  topics:
+    cmd_vel: "/cmd_vel"
+    odom: "/chassis/odom"
+    rgb_image: "/front_stereo_camera/left/image_raw"
+    imu: "/chassis/imu"
+    pointcloud: "/front_3d_lidar/lidar_points"
+    
+    # Nova Carter 没有深度图像，只有 RGB 相机
+    # depth_image: null  # 禁用深度图像
+    # laser_scan: null  # Nova Carter 使用 3D 点云，不是 2D 激光雷达
+    
+  # QoS 配置
+  sensor_qos_depth: 10
+  cmd_qos_depth: 10
+  
+  # 禁用压缩图像（Nova Carter 发布标准 Image）
+  rgb_image_compressed: false
+
+perception:
+  # 点云处理配置
+  lidar:
+    max_points: 100000  # 限制点云数量以优化性能
+    downsample_factor: 2  # 降采样因子
+    ground_removal: true  # 移除地面点
+    noise_filter: true  # 噪声过滤
+  
+  # 占据地图配置
+  occupancy_map:
+    resolution: 0.1  # 米/格
+    width: 500  # 500 格
+    height: 500  # 500 格
+    origin_x: -25.0  # 地图原点 x (米)
+    origin_y: -25.0  # 地图原点 y (米)
+
+visualization:
+  # 可视化配置
+  pointcloud:
+    display: true
+    color_mode: "height"  # height, distance, intensity
+    auto_rotate: false
+    point_size: 2
+  
+  map:
+    display: true
+    colormap: "viridis"
+    show_robot_pose: true
+    show_trajectory: true
+  
+  # RViz2 配置
+  rviz2:
+    config_path: "config/rviz2/nova_carter.rviz"
+
+

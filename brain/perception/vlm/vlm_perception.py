@@ -195,7 +195,7 @@ class VLMPerception:
 
     def __init__(
         self,
-        model: str = "llava:latest",
+        model: str = "llava:7b",
         ollama_host: str = "http://localhost:11434",
         use_yolo: bool = False,
         yolo_model: str = "yolov8n.pt"

@@ -78,3 +78,6 @@ class DialogueContext:
         summary = "\n".join([f"[{m.role}]: {m.content[:50]}..." for m in last_messages])
         return f"最近对话:\n{summary}"
 
+
+
+

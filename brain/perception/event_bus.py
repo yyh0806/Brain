@@ -274,3 +274,6 @@ def set_event_bus(event_bus: PerceptionEventBus):
     """设置全局事件总线实例"""
     global _global_event_bus
     _global_event_bus = event_bus
+
+
+

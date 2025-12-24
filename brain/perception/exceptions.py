@@ -98,3 +98,6 @@ class VLMPerceptionError(PerceptionError):
     ):
         super().__init__(message, component="vlm", context=context)
         self.vlm_model = vlm_model
+
+
+

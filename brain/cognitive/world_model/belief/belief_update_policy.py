@@ -149,3 +149,6 @@ class BeliefUpdatePolicy:
         """检查信念是否已被证伪"""
         return belief_id in self.falsified_belief_ids
 
+
+
+
