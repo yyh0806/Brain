@@ -610,7 +610,15 @@ class ROS2Interface:
             return data.reshape(msg.height, msg.width)
         else:
             # RGB图像
-            return np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width, 3)
+            data_array = np.frombuffer(msg.data, dtype=np.uint8)
+            try:
+                return data_array.reshape(msg.height, msg.width, 3)
+            except ValueError:
+                # 如果reshape失败，尝试使用step字段（处理padding情况）
+                if msg.step > 0 and msg.step >= msg.width * 3:
+                    reshaped_step = data_array[:msg.step*msg.height].reshape(msg.height, msg.step)
+                    return reshaped_step[:, :msg.width*3].reshape(msg.height, msg.width, 3)
+                raise
     
     def _trigger_callbacks(self, sensor_type: str):
         """触发传感器回调"""
