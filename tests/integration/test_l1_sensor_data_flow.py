@@ -60,31 +60,37 @@ class L1SensorDataFlowTests:
         try:
             # 设置测试环境
             await self.framework.setup()
-            
+
+            # 等待收集传感器数据
+            print("\n等待传感器数据...")
+            await self.framework.wait_for_topics(timeout=15.0)
+            print("等待额外时间以收集更多数据...")
+            await asyncio.sleep(3.0)
+
             # L1-001: ROS2话题连接验证
             result = await self.framework.run_test(
                 "L1-001: ROS2话题连接验证",
                 self.framework.verify_ros2_topics_connection
             )
-            
+
             # L1-002: 数据接收频率验证
             result = await self.framework.run_test(
                 "L1-002: 数据接收频率验证",
                 self.framework.verify_sensor_data_rate
             )
-            
+
             # L1-003: 数据质量验证
             result = await self.framework.run_test(
                 "L1-003: 数据质量验证",
                 self.framework.verify_data_quality
             )
-            
+
             # L1-004: 多传感器时间同步
             result = await self.framework.run_test(
                 "L1-004: 多传感器时间同步",
                 self.framework.verify_sensor_synchronization
             )
-            
+
             # L1-005: 传感器数据融合
             result = await self.framework.run_test(
                 "L1-005: 传感器数据融合",

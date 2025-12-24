@@ -41,3 +41,5 @@ scene_description = await vlm.describe_scene(perception_data.rgb_image)
 更多详细示例请参考各模块的文档页面。
 
 
+
+
