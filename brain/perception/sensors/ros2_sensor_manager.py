@@ -526,4 +526,20 @@ class ROS2SensorManager:
         
         logger.warning("等待传感器超时")
         return False
+    
+    def get_manager_statistics(self) -> Dict[str, Any]:
+        """获取管理器统计信息
+        
+        Returns:
+            Dictionary containing manager statistics
+        """
+        return {
+            "total_sensors": len(self.sensor_status),
+            "active_sensors": sum(1 for status in self.sensor_status.values() if status.connected),
+            "enabled_sensors": sum(1 for status in self.sensor_status.values() if status.enabled),
+            "data_history_size": len(self._data_history),
+            "last_update": str(self._last_perception.timestamp) if self._last_perception else "N/A",
+            "sensor_types": {s.name: status.connected for s, status in self.sensor_status.items()},
+            "ros2_interface_initialized": self.ros2_interface._initialized if hasattr(self.ros2_interface, '_initialized') else False
+        }
 
