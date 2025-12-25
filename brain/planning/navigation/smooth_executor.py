@@ -16,7 +16,7 @@ from loguru import logger
 
 from brain.communication.control_adapter import ControlAdapter, PlatformType, PlatformCapabilities
 from brain.perception.ros2_sensor_manager import ROS2SensorManager, PerceptionData
-from brain.perception.vlm_perception import VLMPerception, SceneDescription
+from brain.perception.vlm.vlm_perception import VLMPerception, SceneDescription
 from brain.cognitive.world_model import WorldModel
 
 

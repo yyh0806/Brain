@@ -14,7 +14,7 @@ from datetime import datetime
 from loguru import logger
 
 from brain.communication.control_adapter import ControlAdapter, PlatformType
-from brain.perception.vlm_perception import VLMPerception, SceneDescription
+from brain.perception.vlm.vlm_perception import VLMPerception, SceneDescription
 from brain.perception.ros2_sensor_manager import ROS2SensorManager, PerceptionData, Pose2D
 from brain.cognitive.world_model import WorldModel
 from brain.navigation.smooth_executor import SmoothExecutor

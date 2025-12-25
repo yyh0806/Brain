@@ -17,7 +17,7 @@ from enum import Enum
 from loguru import logger
 
 from brain.cognitive.world_model import WorldModel, SemanticObject
-from brain.perception.vlm_perception import VLMPerception, TargetSearchResult
+from brain.perception.vlm.vlm_perception import VLMPerception, TargetSearchResult
 from brain.perception.ros2_sensor_manager import ROS2SensorManager, PerceptionData
 from brain.execution.operations.ros2_ugv import (
     ROS2UGVOperations, UGVOperation, UGVOperationType

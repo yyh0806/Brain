@@ -200,6 +200,10 @@ class ROS2SensorManager:
             config=self.config.get("occupancy", {})
         )
         
+        # 初始化VLM（如果提供）- 已弃用，改用异步VLMService
+        self.vlm_sync = vlm  # 保留向后兼容
+        self._vlm_service = None  # 新的异步VLM服务
+        
         # 初始化WorldModel（全局世界模型）
         if world_model is None:
             from brain.perception.world_model import WorldModel

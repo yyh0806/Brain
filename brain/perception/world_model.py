@@ -21,7 +21,7 @@ from datetime import datetime
 from loguru import logger
 
 from brain.perception.mapping.occupancy_mapper import OccupancyMapper, OccupancyGrid, CellState
-from brain.perception.vlm_perception import DetectedObject, SceneDescription
+from brain.perception.vlm.vlm_perception import DetectedObject, SceneDescription
 
 
 @dataclass

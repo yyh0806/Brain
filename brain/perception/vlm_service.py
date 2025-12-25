@@ -21,7 +21,7 @@ from loguru import logger
 import numpy as np
 import hashlib
 
-from brain.perception.vlm_perception import VLMPerception, SceneDescription, DetectedObject
+from brain.perception.vlm.vlm_perception import VLMPerception, SceneDescription, DetectedObject
 
 
 @dataclass

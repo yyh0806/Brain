@@ -47,7 +47,7 @@ logger.add(sys.stderr, level="INFO", format="{time:HH:mm:ss} | {level} | {messag
 # 导入模块
 from brain.ros2.ros2_interface import ROS2Interface, ROS2Config, ROS2Mode
 from brain.perception.ros2_sensor_manager import ROS2SensorManager
-from brain.perception.vlm_perception import VLMPerception
+from brain.perception.vlm.vlm_perception import VLMPerception
 from brain.cognitive.world_model import WorldModel
 from brain.platforms.robot_capabilities import create_ugv_capabilities
 from brain.operations.ros2_ugv import ROS2UGVOperations
