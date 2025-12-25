@@ -295,24 +295,20 @@ class WorldModel:
         else:
             return 0.5  # 未知
     
-    def get_global_map(self) -> OccupancyGrid:
+    def get_global_map(self) -> Optional[np.ndarray]:
         """
         获取全局占据地图快照
         
         Returns:
-            OccupancyGrid对象（包含地图数据的深拷贝）
+            地图数据的深拷贝（np.ndarray），或None
         """
         grid = self.occupancy_mapper.get_grid()
         
         # 返回深拷贝以避免外部修改
-        return OccupancyGrid(
-            width=grid.width,
-            height=grid.height,
-            resolution=grid.resolution,
-            origin_x=grid.origin_x,
-            origin_y=grid.origin_y,
-            data=grid.data.copy()
-        )
+        # 注意：PerceptionData.global_map期望np.ndarray，不是OccupancyGrid对象
+        if grid is not None and grid.data is not None:
+            return grid.data.copy()
+        return None
     
     def get_semantic_map(self) -> Dict[str, List[Dict[str, Any]]]:
         """
