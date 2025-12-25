@@ -281,6 +281,9 @@ class OccupancyMapper:
         cos_yaw = math.cos(robot_yaw)
         sin_yaw = math.sin(robot_yaw)
         
+        robot_world_x = robot_x
+        robot_world_y = robot_y
+        
         for point in points:
             x, y, z = point[0], point[1], point[2]
             
@@ -297,6 +300,12 @@ class OccupancyMapper:
             gx, gy = self.grid.world_to_grid(world_x, world_y)
             if self.grid.is_valid(gx, gy):
                 self.grid.set_cell(gx, gy, CellState.OCCUPIED)
+            
+            # 更新从机器人到障碍物之间的自由空间
+            self._update_free_space(
+                (robot_world_x, robot_world_y),
+                (world_x, world_y)
+            )
     
     def _update_free_space(
         self,

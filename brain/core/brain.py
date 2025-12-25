@@ -132,17 +132,50 @@ class Brain:
         
         # 先初始化ROS2接口（同步初始化）
         comm_config = self.config.get("communication", {})
+        # 检查是否有ros2_interface配置（用于Isaac Sim等环境）
+        ros2_config_dict = self.config.get("ros2_interface", comm_config)
+        
+        # 解析mode配置
+        mode_str = ros2_config_dict.get("mode", "simulation")
+        if isinstance(mode_str, str):
+            from brain.communication.ros2_interface import ROS2Mode
+            if mode_str.lower() == "real":
+                mode = ROS2Mode.REAL
+            else:
+                mode = ROS2Mode.SIMULATION
+        else:
+            mode = ROS2Mode.SIMULATION
+        
         # 创建ROS2Config对象，过滤不支持的参数
         ros2_config = ROS2Config(
-            node_name=comm_config.get("node_name", "brain_node"),
-            topics=comm_config.get("topics", {})
+            node_name=ros2_config_dict.get("node_name", comm_config.get("node_name", "brain_node")),
+            mode=mode,
+            topics=ros2_config_dict.get("topics", comm_config.get("topics", {}))
         )
         self.ros2 = ROS2Interface(ros2_config)
         
-        # 感知系统 - 使用ROS2SensorManager并传入ROS2接口
+        # 初始化VLM（如果配置启用）
+        vlm = None
+        vlm_config = self.config.get("perception", {}).get("vlm", {})
+        if vlm_config.get("enabled", True):
+            try:
+                from brain.perception.vlm.vlm_perception import VLMPerception, OLLAMA_AVAILABLE
+                if OLLAMA_AVAILABLE:
+                    vlm = VLMPerception(
+                        model=vlm_config.get("model", "llava:7b"),
+                        ollama_host=vlm_config.get("ollama_host", "http://localhost:11434")
+                    )
+                    logger.info("VLM已初始化并传入感知层")
+                else:
+                    logger.warning("Ollama不可用，VLM功能将不可用")
+            except Exception as e:
+                logger.warning(f"VLM初始化失败: {e}")
+        
+        # 感知系统 - 使用ROS2SensorManager并传入ROS2接口和VLM
         self.sensor_manager = ROS2SensorManager(
             ros2_interface=self.ros2,
-            config=self.config.get("perception", {})
+            config=self.config.get("perception", {}),
+            vlm=vlm  # 传入VLM
         )
         
         # 规划与执行

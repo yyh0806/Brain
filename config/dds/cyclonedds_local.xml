@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<CycloneDDS xmlns="https://cdds.io/config" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://cdds.io/config https://raw.githubusercontent.com/eclipse-cyclonedds/cyclonedds/master/etc/cyclonedds.xsd">
+    <Domain>
+        <General>
+            <!-- 只在本地发现节点，禁用网络组播 -->
+            <NetworkInterfaceAddress>127.0.0.1</NetworkInterfaceAddress>
+            <AllowMulticast>false</AllowMulticast>
+            
+            <!-- 禁用自动发现外部节点 -->
+            <Discovery>
+                <ParticipantIndex>auto</ParticipantIndex>
+                <Peers>
+                    <Peer address="127.0.0.1"/>
+                </Peers>
+                <!-- 只监听本地回环地址 -->
+                <ParticipantIndex>auto</ParticipantIndex>
+            </Discovery>
+        </General>
+
+        <!-- 只允许本地通信 -->
+        <Internal>
+            <MinimalSocketBuffer>0</MinimalSocketBuffer>
+            <NonBlockingPipes>true</NonBlockingPipes>
+        </Internal>
+
+        <!-- 传输层配置 - 使用共享内存和本地传输 -->
+        <Tracing>
+            <Verbosity>warning</Verbosity>
+            <OutputFile>stdout</OutputFile>
+        </Tracing>
+
+        <!-- 只使用共享内存传输（不使用UDP） -->
+        <SharedMemory>
+            <enable>true</enable>
+            <pageSize>65536</pageSize>
+            <segmentSize>52428800</segmentSize>
+        </SharedMemory>
+
+        <!-- 禁用UDP传输 -->
+        <Transport>
+            <TransportLowLatency>false</TransportLowLatency>
+            <TransportNoData>false</TransportNoData>
+            <TransportHighThroughput>false</TransportHighThroughput>
+        </Transport>
+
+        <!-- 优化本地通信性能 -->
+        <DDSI2E>
+            <General>
+                <!-- 只使用本地传输 -->
+                <AllowMulticast>false</AllowMulticast>
+                <NetworkInterfaceAddress>127.0.0.1</NetworkInterfaceAddress>
+                
+                <!-- 禁用SPDP发现协议 -->
+                <EnableMulticastDiscoveryParticipant>false</EnableMulticastDiscoveryParticipant>
+                <EnableMulticastDiscoveryTopic>false</EnableMulticastDiscoveryTopic>
+                <EnableMulticastSporadic>false</EnableMulticastSporadic>
+                
+                <!-- 只使用本地发现 -->
+                <DiscoveryPeers>
+                    <Peer address="127.0.0.1"/>
+                </DiscoveryPeers>
+            </General>
+
+            <!-- 缓冲区配置 -->
+            <Builtin>
+                <!-- 减少发现流量 -->
+                <InitialParticipantAnnouncements>1</InitialParticipantAnnouncements>
+                <SynchronousBuiltinDiscovery>true</SynchronousBuiltinDiscovery>
+                <!-- 快速发现本地节点 -->
+                <ParticipantDiscoveryLeaseDuration>2</ParticipantDiscoveryLeaseDuration>
+                <AssumeAliveDuration>4</AssumeAliveDuration>
+            </Builtin>
+
+            <!-- 可靠性配置 -->
+            <Reliability>
+                <!-- 优化本地通信 -->
+                <MaxSamples>512</MaxSamples>
+                <SchedulingPolicy>roundrobin</SchedulingPolicy>
+            </Reliability>
+
+            <!-- 本地传输优化 -->
+            <Internal>
+                <SocketBufferSize>131072</SocketBufferSize>
+                <FragmentSize>16384</FragmentSize>
+            </Internal>
+        </DDSI2E>
+
+        <!-- 内存池配置 -->
+        <Allocation>
+            <!-- 优化本地通信的内存使用 -->
+            <Leeway>1048576</Leeway>
+            <MaxSampleSize>65536</MaxSampleSize>
+            <SampleReclamation>max_samples</SampleReclamation>
+        </Allocation>
+    </Domain>
+</CycloneDDS>
+
+

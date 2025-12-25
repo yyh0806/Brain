@@ -9,11 +9,12 @@ ROS2多传感器管理器 - ROS2 Sensor Manager
 """
 
 import asyncio
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from collections import deque
+from functools import partial
 import numpy as np
 import math
 from loguru import logger
@@ -23,6 +24,9 @@ from brain.perception.mapping.occupancy_mapper import OccupancyMapper
 from brain.perception.utils.coordinates import quaternion_to_euler, transform_local_to_world
 from brain.perception.utils.math_utils import angle_to_direction, compute_laser_angles
 from brain.perception.data_models import Pose2D, Pose3D, Velocity
+
+if TYPE_CHECKING:
+    from brain.perception.vlm.vlm_perception import DetectedObject, SceneDescription, VLMPerception
 
 
 class SensorType(Enum):
@@ -67,6 +71,7 @@ class PerceptionData:
     
     # 原始图像
     rgb_image: Optional[np.ndarray] = None
+    rgb_image_right: Optional[np.ndarray] = None
     depth_image: Optional[np.ndarray] = None
     
     # 激光雷达
@@ -86,6 +91,20 @@ class PerceptionData:
     
     # 传感器状态
     sensor_status: Dict[str, bool] = field(default_factory=dict)
+    
+    # === 全局世界模型快照 ===
+    # 全局占据地图（持久环境表示）
+    global_map: Optional['OccupancyGrid'] = None
+    # 语义物体（来自世界模型）
+    semantic_objects: List['DetectedObject'] = field(default_factory=list)
+    # 场景描述（来自世界模型）
+    scene_description: Optional['SceneDescription'] = None
+    # 空间关系（来自世界模型）
+    spatial_relations: List[Dict[str, Any]] = field(default_factory=list)
+    # 导航提示（来自世界模型）
+    navigation_hints: List[str] = field(default_factory=list)
+    # 世界模型元数据
+    world_metadata: Optional[Dict[str, Any]] = None
     
     def get_front_distance(self) -> float:
         """获取前方障碍物距离"""
@@ -139,13 +158,16 @@ class ROS2SensorManager:
     """
     ROS2传感器管理器
     
-    统一管理多种传感器，提供融合后的感知数据
+    统一管理多种传感器，提供融合后的感知数据，
+    并集成全局世界模型进行持久环境表示。
     """
     
     def __init__(
         self,
         ros2_interface: ROS2Interface,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        vlm: Optional['VLMPerception'] = None,
+        world_model: Optional['WorldModel'] = None
     ):
         self.ros2 = ros2_interface
         # 公共属性用于测试框架
@@ -168,7 +190,7 @@ class ROS2SensorManager:
         self._obstacle_threshold = self.config.get("obstacle_threshold", 0.5)
         self._min_obstacle_size = self.config.get("min_obstacle_size", 0.1)
         
-        # 占据栅格生成器
+        # 占据栅格生成器（保留以兼容性，但主要使用WorldModel）
         grid_resolution = self.config.get("grid_resolution", 0.1)
         map_size = self.config.get("map_size", 50.0)
         self.occupancy_mapper = OccupancyMapper(
@@ -177,7 +199,23 @@ class ROS2SensorManager:
             config=self.config.get("occupancy", {})
         )
         
-        logger.info("ROS2SensorManager 初始化完成")
+        # 集成WorldModel（全局世界模型）
+        if world_model is None:
+            from brain.perception.world_model import WorldModel
+            world_model = WorldModel(
+                resolution=grid_resolution,
+                map_size=map_size,
+                config=self.config.get("world_model", {})
+            )
+        self.world_model = world_model
+        
+        # 初始化VLM（如果提供）- 已弃用，改用异步VLMService
+        self.vlm_sync = vlm  # 保留向后兼容
+        self._vlm_service = None  # 新的异步VLM服务
+        
+        logger.info("ROS2SensorManager 初始化完成" + 
+                   (" (VLM已启用)" if vlm is not None else "") +
+                   " (WorldModel已集成)")
     
     def _init_sensor_status(self):
         """初始化传感器状态"""
@@ -213,10 +251,14 @@ class ROS2SensorManager:
                 perception.pose = self._fuse_imu_pose(perception.pose, raw_data.imu)
             self._update_sensor_status(SensorType.IMU, True)
         
-        # 处理RGB图像
+        # 处理RGB图像（左眼）
         if raw_data.rgb_image is not None:
             perception.rgb_image = raw_data.rgb_image
             self._update_sensor_status(SensorType.RGB_CAMERA, True)
+        
+        # 处理RGB图像（右眼）
+        if hasattr(raw_data, 'rgb_image_right') and raw_data.rgb_image_right is not None:
+            perception.rgb_image_right = raw_data.rgb_image_right
         
         # 处理深度图像
         if raw_data.depth_image is not None:
@@ -238,6 +280,24 @@ class ROS2SensorManager:
         if raw_data.pointcloud is not None:
             perception.pointcloud = raw_data.pointcloud
             self._update_sensor_status(SensorType.POINTCLOUD, True)
+            
+            # 如果激光雷达数据不存在，从点云转换
+            if not raw_data.laser_scan and perception.pose:
+                laser_data = self._convert_pointcloud_to_laser(
+                    raw_data.pointcloud,
+                    perception.pose
+                )
+                if laser_data:
+                    perception.laser_ranges = laser_data["ranges"]
+                    perception.laser_angles = laser_data["angles"]
+                    # 使用转换后的激光雷达数据检测障碍物
+                    perception.obstacles = self._detect_obstacles_from_laser(
+                        perception.laser_ranges,
+                        perception.laser_angles,
+                        perception.pose
+                    )
+                    self._update_sensor_status(SensorType.LIDAR, True)
+                    logger.debug(f"从点云转换激光雷达数据: {len(perception.laser_ranges)} 个点")
         
         # 处理占据地图（从外部地图）
         if raw_data.occupancy_grid is not None:
@@ -252,31 +312,27 @@ class ROS2SensorManager:
         if perception.pose:
             pose_2d = (perception.pose.x, perception.pose.y, perception.pose.yaw)
             
+            # 获取事件循环（Python 3.8兼容）
+            loop = asyncio.get_event_loop()
+            
             # 从深度图更新（异步）
             if perception.depth_image is not None:
-                # 使用异步处理避免阻塞
-                await asyncio.to_thread(
-                    self.occupancy_mapper.update_from_depth,
-                    perception.depth_image,
-                    pose=pose_2d
-                )
+                # 使用异步处理避免阻塞（Python 3.8兼容）
+                # 使用partial包装函数以支持关键字参数
+                func = partial(self.occupancy_mapper.update_from_depth, pose=pose_2d)
+                await loop.run_in_executor(None, func, perception.depth_image)
             
             # 从激光雷达更新（异步）
             if perception.laser_ranges and perception.laser_angles:
-                await asyncio.to_thread(
-                    self.occupancy_mapper.update_from_laser,
-                    perception.laser_ranges,
-                    perception.laser_angles,
-                    pose=pose_2d
+                func = partial(self.occupancy_mapper.update_from_laser, pose=pose_2d)
+                await loop.run_in_executor(
+                    None, func, perception.laser_ranges, perception.laser_angles
                 )
             
             # 从点云更新（异步）
             if perception.pointcloud is not None:
-                await asyncio.to_thread(
-                    self.occupancy_mapper.update_from_pointcloud,
-                    perception.pointcloud,
-                    pose=pose_2d
-                )
+                func = partial(self.occupancy_mapper.update_from_pointcloud, pose=pose_2d)
+                await loop.run_in_executor(None, func, perception.pointcloud)
             
             # 将生成的栅格添加到感知数据
             perception.occupancy_grid = self.occupancy_mapper.get_grid().data
@@ -291,6 +347,22 @@ class ROS2SensorManager:
             sensor_type.value: status.is_healthy()
             for sensor_type, status in self.sensor_status.items()
         }
+        
+        # VLM场景理解（如果可用且满足频率要求）
+        if (self.vlm and 
+            perception.rgb_image is not None and 
+            self._should_run_vlm_analysis()):
+            try:
+                scene = await self.vlm.describe_scene(perception.rgb_image)
+                if scene:
+                    perception.scene_description = scene
+                    perception.semantic_objects = scene.objects
+                    perception.spatial_relations = scene.spatial_relations
+                    perception.navigation_hints = scene.navigation_hints
+                    self._last_vlm_analysis = datetime.now()
+                    logger.debug(f"VLM分析完成: 检测到{len(scene.objects)}个对象")
+            except Exception as e:
+                logger.warning(f"VLM分析失败: {e}")
         
         # 缓存数据（使用循环缓冲区，自动限制大小）
         self._latest_data = perception
@@ -346,6 +418,75 @@ class ROS2SensorManager:
         
         return pose
     
+    
+    def _convert_pointcloud_to_laser(
+        self,
+        pointcloud: np.ndarray,
+        pose: Optional[Pose3D] = None
+    ) -> Optional[Dict[str, List[float]]]:
+        """
+        将点云转换为激光雷达格式（ranges, angles）
+        
+        Args:
+            pointcloud: 点云数组 (N, 3) 或 (N, 6)，包含XYZ坐标
+            pose: 机器人位姿，用于转换到机器人坐标系
+            
+        Returns:
+            Dict包含 "ranges" 和 "angles" 列表，如果转换失败返回None
+        """
+        if pointcloud is None or pointcloud.size == 0:
+            return None
+        
+        # 提取XYZ坐标（前3列）
+        if pointcloud.shape[1] >= 3:
+            points = pointcloud[:, :3]
+        else:
+            return None
+        
+        # 如果有点云但为空，返回None
+        if len(points) == 0:
+            return None
+        
+        # 转换到机器人坐标系（如果提供了位姿）
+        if pose:
+            # 将世界坐标转换为机器人局部坐标
+            cos_yaw = math.cos(-pose.yaw)  # 反向旋转
+            sin_yaw = math.sin(-pose.yaw)
+            
+            # 相对于机器人的位置
+            rel_points = points.copy()
+            rel_points[:, 0] -= pose.x
+            rel_points[:, 1] -= pose.y
+            
+            # 旋转到机器人坐标系
+            x_local = rel_points[:, 0] * cos_yaw - rel_points[:, 1] * sin_yaw
+            y_local = rel_points[:, 0] * sin_yaw + rel_points[:, 1] * cos_yaw
+        else:
+            # 假设点云已经在机器人坐标系
+            x_local = points[:, 0]
+            y_local = points[:, 1]
+        
+        # 转换为极坐标
+        ranges = np.sqrt(x_local**2 + y_local**2)
+        angles = np.arctan2(y_local, x_local)
+        
+        # 过滤无效点
+        valid_mask = (ranges > 0.1) & (ranges < 30.0) & np.isfinite(ranges) & np.isfinite(angles)
+        valid_ranges = ranges[valid_mask]
+        valid_angles = angles[valid_mask]
+        
+        if len(valid_ranges) == 0:
+            return None
+        
+        # 按角度排序
+        sort_indices = np.argsort(valid_angles)
+        sorted_ranges = valid_ranges[sort_indices].tolist()
+        sorted_angles = valid_angles[sort_indices].tolist()
+        
+        return {
+            "ranges": sorted_ranges,
+            "angles": sorted_angles
+        }
     
     def _detect_obstacles_from_laser(
         self,
@@ -439,6 +580,15 @@ class ROS2SensorManager:
             })
         
         return obstacles
+    
+    def _should_run_vlm_analysis(self) -> bool:
+        """判断是否应该运行VLM分析（频率控制）"""
+        if not self._vlm_enabled:
+            return False
+        if self._last_vlm_analysis is None:
+            return True
+        elapsed = (datetime.now() - self._last_vlm_analysis).total_seconds()
+        return elapsed >= self._vlm_analysis_interval
     
     def _update_sensor_status(self, sensor_type: SensorType, connected: bool):
         """更新传感器状态"""
