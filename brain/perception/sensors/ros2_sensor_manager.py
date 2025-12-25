@@ -191,6 +191,7 @@ class ROS2SensorManager:
         self._min_obstacle_size = self.config.get("min_obstacle_size", 0.1)
         
         # 占据栅格生成器（保留以兼容性，但主要使用WorldModel）
+        # 注意：WorldModel内部已经包含OccupancyMapper
         grid_resolution = self.config.get("grid_resolution", 0.1)
         map_size = self.config.get("map_size", 50.0)
         self.occupancy_mapper = OccupancyMapper(
@@ -198,6 +199,32 @@ class ROS2SensorManager:
             map_size=map_size,
             config=self.config.get("occupancy", {})
         )
+        
+        # 初始化WorldModel（全局世界模型）
+        if world_model is None:
+            from brain.perception.world_model import WorldModel
+            world_model = WorldModel(
+                resolution=grid_resolution,
+                map_size=map_size,
+                config=self.config.get("world_model", {})
+            )
+        self.world_model = world_model
+        
+        # 初始化VLMService（异步VLM分析服务）
+        if vlm is not None and self._vlm_service is None:
+            from brain.perception.vlm_service import VLMService
+            self._vlm_service = VLMService(
+                vlm=vlm,
+                max_workers=self.config.get("vlm", {}).get("max_workers", 1),
+                cache_size=self.config.get("vlm", {}).get("cache_size", 10),
+                timeout=self.config.get("vlm", {}).get("timeout", 30.0),
+                enable_cache=self.config.get("vlm", {}).get("enable_cache", True)
+            )
+            logger.info("VLM异步服务已初始化")
+        elif vlm is None and self._vlm_service is not None:
+            # VLM被禁用但服务存在，停止服务
+            logger.info("VLM被禁用，停止VLM异步服务")
+            self._vlm_service = None
         
         # 集成WorldModel（全局世界模型）
         if world_model is None:
@@ -348,27 +375,71 @@ class ROS2SensorManager:
             for sensor_type, status in self.sensor_status.items()
         }
         
-        # VLM场景理解（如果可用且满足频率要求）
-        if (self.vlm and 
-            perception.rgb_image is not None and 
-            self._should_run_vlm_analysis()):
+        # 更新全局世界模型（持久地图）
+        if self.world_model:
+            self.world_model.update_with_perception(perception)
+        
+        # 从世界模型获取地图快照（持久、融合的环境表示）
+        if self.world_model:
+            perception.global_map = self.world_model.get_global_map()
+            perception.semantic_objects = list(self.world_model.semantic_objects.values())
+            perception.scene_description = self.world_model.metadata.scene_description if hasattr(self.world_model.metadata, 'scene_description') else None
+            perception.spatial_relations = self.world_model.spatial_relations.copy()
+            perception.navigation_hints = self.world_model.metadata.navigation_hints if hasattr(self.world_model.metadata, 'navigation_hints') else []
+            perception.world_metadata = {
+                "created_at": self.world_model.metadata.created_at.isoformat(),
+                "last_updated": self.world_model.metadata.last_updated.isoformat(),
+                "update_count": self.world_model.metadata.update_count,
+                "confidence": self.world_model.metadata.confidence,
+                "map_stats": self.world_model.get_map_statistics()
+            }
+        
+        # 触发异步VLM分析（不阻塞主循环）
+        if self._vlm_service and perception.rgb_image is not None:
             try:
-                scene = await self.vlm.describe_scene(perception.rgb_image)
-                if scene:
-                    perception.scene_description = scene
-                    perception.semantic_objects = scene.objects
-                    perception.spatial_relations = scene.spatial_relations
-                    perception.navigation_hints = scene.navigation_hints
-                    self._last_vlm_analysis = datetime.now()
-                    logger.debug(f"VLM分析完成: 检测到{len(scene.objects)}个对象")
+                # 提交VLM分析请求到异步服务
+                request_id = await self._vlm_service.analyze_image(perception.rgb_image)
+                logger.debug(f"VLM分析请求已提交: {request_id}")
             except Exception as e:
-                logger.warning(f"VLM分析失败: {e}")
+                logger.error(f"提交VLM分析请求失败: {e}")
         
         # 缓存数据（使用循环缓冲区，自动限制大小）
         self._latest_data = perception
         self._data_history.append(perception)  # deque会自动移除最旧的元素
         
         return perception
+    
+    async def start_vlm_service(self) -> None:
+        """启动VLM异步服务"""
+        if self.vlm_sync and not self._vlm_service:
+            from brain.perception.vlm_service import VLMService
+            self._vlm_service = VLMService(
+                vlm=self.vlm_sync,
+                max_workers=self.config.get("vlm", {}).get("max_workers", 1),
+                cache_size=self.config.get("vlm", {}).get("cache_size", 10),
+                timeout=self.config.get("vlm", {}).get("timeout", 30.0),
+                enable_cache=self.config.get("vlm", {}).get("enable_cache", True)
+            )
+            await self._vlm_service.start()
+            logger.info("VLM异步服务已启动")
+    
+    async def stop_vlm_service(self) -> None:
+        """停止VLM异步服务"""
+        if self._vlm_service:
+            await self._vlm_service.stop()
+            logger.info("VLM异步服务已停止")
+    
+    def get_vlm_service_statistics(self) -> Dict[str, Any]:
+        """获取VLM服务统计"""
+        if self._vlm_service:
+            return self._vlm_service.get_statistics()
+        return {"running": False, "total_requests": 0}
+    
+    def get_world_model_statistics(self) -> Dict[str, Any]:
+        """获取世界模型统计"""
+        if self.world_model:
+            return self.world_model.get_map_statistics()
+        return None
     
     def _extract_pose(self, odom: Dict[str, Any]) -> Pose3D:
         """从里程计提取位姿"""
