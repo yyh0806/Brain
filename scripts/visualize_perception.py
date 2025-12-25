@@ -87,12 +87,13 @@ class PerceptionDataVisualizer:
         # 4. 机器人位姿
         self._draw_pose(perception_data.pose, perception_data.velocity)
         
-        # 5. 占据栅格地图（重点）
+        # 5. 占据栅格地图（重点 - 支持全局地图）
         self._draw_occupancy_grid(
             perception_data.occupancy_grid,
             perception_data.grid_resolution,
             perception_data.grid_origin,
-            perception_data.pose
+            perception_data.pose,
+            perception_data  # 传递perception_data以支持全局地图显示
         )
         
         # 6. 障碍物
@@ -112,30 +113,30 @@ class PerceptionDataVisualizer:
         ax.set_ylim(0, 1)
         
         if rgb_image is not None and rgb_image.size > 0:
-                img_min, img_max = rgb_image.min(), rgb_image.max()
-                if img_min == img_max == 0:
-                    ax.text(0.5, 0.5, f'{title}\n⚠️ All Black\n(Min=Max=0)', 
-                           ha='center', va='center', transform=ax.transAxes, 
-                           fontsize=9, color='red', weight='bold',
-                           bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7))
-                    ax.axis('off')
-                    return
+            img_min, img_max = rgb_image.min(), rgb_image.max()
+            if img_min == img_max == 0:
+                ax.text(0.5, 0.5, f'{title}\n⚠️ All Black\n(Min=Max=0)', 
+                       ha='center', va='center', transform=ax.transAxes, 
+                       fontsize=9, color='red', weight='bold',
+                       bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7))
+                ax.axis('off')
+                return
+        
+        # 检查图像格式和方向
+        if rgb_image is not None and len(rgb_image.shape) == 3:
+            # 确保图像方向正确（matplotlib期望的是(height, width, channels)）
+            # 如果图像是转置的，需要调整
+            if rgb_image.shape[0] < rgb_image.shape[1] and rgb_image.shape[2] == 3:
+                # 可能是(width, height, channels)，需要转置
+                if rgb_image.shape[0] < 1000:  # 宽度通常不会这么小
+                    rgb_image = np.transpose(rgb_image, (1, 0, 2))
             
-            # 检查图像格式和方向
-            if len(rgb_image.shape) == 3:
-                # 确保图像方向正确（matplotlib期望的是(height, width, channels)）
-                # 如果图像是转置的，需要调整
-                if rgb_image.shape[0] < rgb_image.shape[1] and rgb_image.shape[2] == 3:
-                    # 可能是(width, height, channels)，需要转置
-                    if rgb_image.shape[0] < 1000:  # 宽度通常不会这么小
-                        rgb_image = np.transpose(rgb_image, (1, 0, 2))
-                
-                # 确保数据类型正确
-                if rgb_image.dtype != np.uint8:
-                    if rgb_image.max() <= 1.0:
-                        rgb_image = (rgb_image * 255).astype(np.uint8)
-                    else:
-                        rgb_image = rgb_image.astype(np.uint8)
+            # 确保数据类型正确
+            if rgb_image.dtype != np.uint8:
+                if rgb_image.max() <= 1.0:
+                    rgb_image = (rgb_image * 255).astype(np.uint8)
+                else:
+                    rgb_image = rgb_image.astype(np.uint8)
             
             ax.imshow(rgb_image, aspect='auto')
             img_min, img_max = rgb_image.min(), rgb_image.max()
@@ -203,11 +204,17 @@ class PerceptionDataVisualizer:
                              ha='center', va='center', transform=self.ax_pose.transAxes, fontsize=10)
     
     def _draw_occupancy_grid(self, grid: Optional[np.ndarray], 
-                           resolution: float, origin: tuple, pose):
-        """绘制占据栅格地图（改进版）"""
+                           resolution: float, origin: tuple, pose, perception_data=None):
+        """绘制占据栅格地图（改进版 - 支持全局地图）"""
         self.ax_occupancy.clear()
         
-        if grid is None:
+        # 优先显示全局地图，否则显示局部占据栅格
+        if perception_data is not None and hasattr(perception_data, 'global_map') and perception_data.global_map is not None:
+            grid = perception_data.global_map
+            map_type = "Global"
+        elif grid is not None:
+            map_type = "Local"
+        else:
             self.ax_occupancy.text(0.5, 0.5, 'Occupancy Map Not Generated',
                                  ha='center', va='center',
                                  transform=self.ax_occupancy.transAxes)
@@ -301,8 +308,8 @@ class PerceptionDataVisualizer:
         unknown_cells = np.sum(grid == -1)
         total_cells = width * height
         
-        # 设置标题和标签（包含调试信息）
-        title = f'Occupancy Grid Map\n'
+        # 设置标题和标签（包含调试信息和地图类型）
+        title = f'{map_type} Occupancy Map\n'
         title += f'Resolution: {resolution:.3f}m, Grid: {width}x{height}\n'
         title += f'Occupied: {occupied_cells} | Free: {free_cells} | Unknown: {unknown_cells}\n'
         title += f'Black=Occupied, White=Free, Gray=Unknown'
@@ -401,7 +408,7 @@ class PerceptionDataVisualizer:
         info_lines.append(f"  PointCloud: {'✓' if perception_data.pointcloud is not None else '✗'}")
         info_lines.append(f"  Pose: {'✓' if perception_data.pose else '✗'}")
         
-        # VLM状态
+        # VLM状态和全局地图信息
         if hasattr(self, '_vlm_enabled'):
             vlm_status = "Enabled" if self._vlm_enabled else "Disabled"
             info_lines.append(f"\nVLM Status: {vlm_status}")
@@ -410,6 +417,18 @@ class PerceptionDataVisualizer:
                     info_lines.append("  Waiting for RGB image...")
                 else:
                     info_lines.append("  Ready to analyze")
+            
+            # 显示全局地图信息
+            if hasattr(perception_data, 'global_map') and perception_data.global_map is not None:
+                info_lines.append(f"\nGlobal Map: ✓")
+                if hasattr(perception_data, 'world_metadata') and perception_data.world_metadata:
+                    meta = perception_data.world_metadata
+                    if 'update_count' in meta:
+                        info_lines.append(f"  Updates: {meta['update_count']}")
+                    if 'confidence' in meta:
+                        info_lines.append(f"  Confidence: {meta['confidence']:.2f}")
+            else:
+                info_lines.append(f"\nGlobal Map: ✗ (Using Local)")
         
         # 场景描述
         if perception_data.scene_description:
