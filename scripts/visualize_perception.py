@@ -78,7 +78,9 @@ class PerceptionDataVisualizer:
         self._draw_rgb_image(perception_data.rgb_image, self.ax_rgb_left, "Left RGB")
         
         # 2. 右眼RGB图像
-        rgb_right = getattr(perception_data, 'rgb_image_right', None)
+        rgb_right = None
+        if hasattr(perception_data, 'rgb_image_right'):
+            rgb_right = perception_data.rgb_image_right
         self._draw_rgb_image(rgb_right, self.ax_rgb_right, "Right RGB")
         
         # 3. 激光雷达数据
@@ -102,9 +104,10 @@ class PerceptionDataVisualizer:
         # 7. 语义信息
         self._draw_semantic_info(perception_data)
         
-        # 使用tight_layout但保持固定布局
-        plt.tight_layout(pad=2.0, h_pad=1.0, w_pad=1.0)
-        plt.pause(0.01)
+        # 使用固定布局，不每次调用tight_layout
+        # plt.tight_layout(pad=2.0, h_pad=1.0, w_pad=1.0)
+        plt.draw()
+        plt.pause(0.05)  # 增加暂停时间以改善显示
     
     def _draw_rgb_image(self, rgb_image: Optional[np.ndarray], ax, title: str = "RGB Image"):
         """绘制RGB图像"""
@@ -112,18 +115,9 @@ class PerceptionDataVisualizer:
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         
-        if rgb_image is not None and rgb_image.size > 0:
-            img_min, img_max = rgb_image.min(), rgb_image.max()
-            if img_min == img_max == 0:
-                ax.text(0.5, 0.5, f'{title}\n⚠️ All Black\n(Min=Max=0)', 
-                       ha='center', va='center', transform=ax.transAxes, 
-                       fontsize=9, color='red', weight='bold',
-                       bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.7))
-                ax.axis('off')
-                return
-        
-        # 检查图像格式和方向
         if rgb_image is not None and len(rgb_image.shape) == 3:
+            # 直接显示图像，不做多余的"全黑"检测
+            # 图像处理已在ros2_interface中完成，这里只负责显示
             # 确保图像方向正确（matplotlib期望的是(height, width, channels)）
             # 如果图像是转置的，需要调整
             if rgb_image.shape[0] < rgb_image.shape[1] and rgb_image.shape[2] == 3:
@@ -461,10 +455,10 @@ class PerceptionDataVisualizer:
 
 async def visualize_perception_loop(brain: Brain, update_interval: float = 0.5):
     """持续可视化感知数据"""
-    # 检查VLM是否启用（参考L2测试的方法）
+    # 检查VLM是否启用（检查_vlm_service而非vlm）
     vlm_enabled = (
-        hasattr(brain.sensor_manager, 'vlm') and 
-        brain.sensor_manager.vlm is not None
+        hasattr(brain.sensor_manager, '_vlm_service') and 
+        brain.sensor_manager._vlm_service is not None
     )
     visualizer = PerceptionDataVisualizer(vlm_enabled=vlm_enabled)
     frame_count = 0
