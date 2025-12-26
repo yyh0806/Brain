@@ -225,9 +225,14 @@ class OccupancyMapper:
         
         robot_x, robot_y, robot_yaw = pose
         
+        occupied_count = 0
+        free_count = 0
+        filtered_count = 0
+        
         for r, a in zip(ranges, angles):
             # 过滤无效距离
             if r < 0.1 or r > self.lidar_range:
+                filtered_count += 1
                 continue
             
             # 计算障碍物位置（机器人坐标系）
@@ -243,13 +248,22 @@ class OccupancyMapper:
             # 更新占据栅格
             gx, gy = self.grid.world_to_grid(world_x, world_y)
             if self.grid.is_valid(gx, gy):
-                self.grid.set_cell(gx, gy, CellState.OCCUPIED)
+                # 检查当前状态，只有状态不同时才更新
+                current_state = self.grid.get_cell(gx, gy)
+                if current_state != CellState.OCCUPIED:
+                    self.grid.set_cell(gx, gy, CellState.OCCUPIED)
+                    occupied_count += 1
             
             # 更新自由空间
-            self._update_free_space(
+            free_updated = self._update_free_space(
                 (robot_x, robot_y),
                 (world_x, world_y)
             )
+            if free_updated:
+                free_count += 1
+        
+        # 记录更新统计
+        logger.debug(f"占据地图更新: 占据={occupied_count}, 自由={free_count}, 过滤={filtered_count}, 总计={len(ranges)}")
     
     def update_from_pointcloud(
         self,
@@ -311,8 +325,12 @@ class OccupancyMapper:
         self,
         start: Tuple[float, float],
         end: Tuple[float, float]
-    ):
-        """更新从起点到终点之间的自由空间（优化的Bresenham算法）"""
+    ) -> bool:
+        """更新从起点到终点之间的自由空间（优化的Bresenham算法）
+        
+        Returns:
+            bool: 是否更新了任何栅格
+        """
         sx, sy = start
         ex, ey = end
         
@@ -322,7 +340,9 @@ class OccupancyMapper:
         
         # 优化：如果起点和终点相同，跳过
         if gx1 == gx2 and gy1 == gy2:
-            return
+            return False
+        
+        updated = False
         
         # 优化的Bresenham算法实现
         dx = abs(gx2 - gx1)
@@ -345,6 +365,7 @@ class OccupancyMapper:
                 # 优化：直接访问grid.data，避免函数调用开销
                 if self.grid.data[y, x] == CellState.UNKNOWN:
                     self.grid.data[y, x] = CellState.FREE
+                    updated = True
             
             # Bresenham算法步进
             e2 = 2 * err
@@ -354,6 +375,8 @@ class OccupancyMapper:
             if e2 < dx:
                 err += dx
                 y += sy_step
+        
+        return updated
     
     def get_grid(self) -> OccupancyGrid:
         """获取占据栅格地图"""

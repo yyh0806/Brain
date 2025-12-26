@@ -45,21 +45,26 @@ logger.remove()
 logger.add(sys.stderr, level="INFO", format="{time:HH:mm:ss} | {level} | {message}")
 
 # 导入模块
-from brain.ros2.ros2_interface import ROS2Interface, ROS2Config, ROS2Mode
-from brain.perception.ros2_sensor_manager import ROS2SensorManager
-from brain.perception.vlm.vlm_perception import VLMPerception
-from brain.cognitive.world_model import WorldModel
-from brain.platforms.robot_capabilities import create_ugv_capabilities
-from brain.operations.ros2_ugv import ROS2UGVOperations
-from brain.navigation.exploration_planner import ExplorationPlanner, ExplorationConfig
-from brain.ros2.control_adapter import ControlAdapter, PlatformType, PlatformCapabilities
-from brain.navigation.smooth_executor import SmoothExecutor, SmoothExecutionConfig
-from brain.navigation.intersection_navigator import IntersectionNavigator
+from brain.communication.ros2_interface import ROS2Interface, ROS2Config, ROS2Mode
+from brain.perception.sensors.ros2_sensor_manager import ROS2SensorManager
 try:
-    from brain.visualization import RViz2Visualizer
+    from brain.perception.vlm.vlm_perception import VLMPerception
+except ImportError:
+    VLMPerception = None
+    logger.warning("VLM perception not available")
+from brain.cognitive.world_model.world_model import WorldModel
+from brain.platforms.robot_capabilities import create_ugv_capabilities
+from brain.execution.operations.ros2_ugv import ROS2UGVOperations
+from brain.planning.navigation.exploration_planner import ExplorationPlanner, ExplorationConfig
+from brain.communication.control_adapter import ControlAdapter, PlatformType, PlatformCapabilities
+from brain.planning.navigation.smooth_executor import SmoothExecutor, SmoothExecutionConfig
+from brain.planning.navigation.intersection_navigator import IntersectionNavigator
+try:
+    from brain.visualization.rviz2_visualizer import RViz2Visualizer
     RVIZ2_AVAILABLE = True
 except ImportError:
     RVIZ2_AVAILABLE = False
+    logger.warning("RViz2 visualizer not available")
 
 
 class NavigationDemo:

@@ -16,9 +16,10 @@ from datetime import datetime, timedelta
 from enum import Enum
 from loguru import logger
 
-from brain.cognitive.world_model import WorldModel, SemanticObject
+from brain.cognitive.world_model.world_model import WorldModel
+from brain.cognitive.world_model.semantic.semantic_object import SemanticObject
 from brain.perception.vlm.vlm_perception import VLMPerception, TargetSearchResult
-from brain.perception.ros2_sensor_manager import ROS2SensorManager, PerceptionData
+from brain.perception.sensors.ros2_sensor_manager import ROS2SensorManager, PerceptionData
 from brain.execution.operations.ros2_ugv import (
     ROS2UGVOperations, UGVOperation, UGVOperationType
 )

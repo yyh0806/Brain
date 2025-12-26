@@ -1,0 +1,32 @@
+# WebViz话题配置 - Nova Carter
+
+# RGB相机
+- name: "RGB Camera"
+  topic: "/front_stereo_camera/left/image_raw"
+  type: "image"
+  
+# 点云（激光雷达）
+- name: "Lidar PointCloud"
+  topic: "/front_3d_lidar/lidar_points"
+  type: "pointcloud"
+  
+# 里程计
+- name: "Odometry"
+  topic: "/chassis/odom"
+  type: "odometry"
+  
+# IMU
+- name: "IMU"
+  topic: "/chassis/imu"
+  type: "imu"
+  
+# 占据地图
+- name: "Occupancy Grid"
+  topic: "/map"
+  type: "occupancy_grid"
+  
+# 世界模型状态（自定义话题）
+- name: "World Model"
+  topic: "/world_model"
+  type: "custom"
+

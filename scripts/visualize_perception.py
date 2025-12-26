@@ -7,6 +7,7 @@ PerceptionData 可视化工具
 
 import os
 import asyncio
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
@@ -72,13 +73,29 @@ class PerceptionDataVisualizer:
     
     def visualize(self, perception_data, frame_count: int = 0):
         """可视化PerceptionData"""
+        # #region agent log
+        import json
+        visualize_start = time.time()
+        rgb_right_check = getattr(perception_data, 'rgb_image_right', None)
+        rgb_right_shape = list(rgb_right_check.shape) if rgb_right_check is not None and hasattr(rgb_right_check, 'shape') else None
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"visualize_perception.py:visualize:72","message":"visualize entry","data":{"frame_count":frame_count,"rgb_right_exists":rgb_right_check is not None,"rgb_right_shape":rgb_right_shape,"hasattr_rgb_right":hasattr(perception_data, 'rgb_image_right')},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
+        
         self.fig.suptitle(f'PerceptionData Visualization - Frame #{frame_count}', 
                          fontsize=16, fontweight='bold')
         
         # 1. 左眼RGB图像
+        draw_left_start = time.time()
         self._draw_rgb_image(perception_data.rgb_image, self.ax_rgb_left, "Left RGB")
+        draw_left_duration = (time.time() - draw_left_start) * 1000
+        # #region agent log
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"G","location":"visualize_perception.py:visualize:79","message":"draw_left_rgb duration","data":{"duration_ms":draw_left_duration},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         
         # 2. 右眼RGB图像
+        draw_right_start = time.time()
         rgb_right = getattr(perception_data, 'rgb_image_right', None)
         if rgb_right is not None and rgb_right.size > 0:
             self._draw_rgb_image(rgb_right, self.ax_rgb_right, "Right RGB")
@@ -95,6 +112,11 @@ class PerceptionDataVisualizer:
                                    fontsize=10, color='orange')
             self.ax_rgb_right.set_title("Right RGB", fontsize=8)
             self.ax_rgb_right.axis('off')
+        draw_right_duration = (time.time() - draw_right_start) * 1000
+        # #region agent log
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"visualize_perception.py:visualize:97","message":"draw_right_rgb result","data":{"rgb_right_was_none":rgb_right is None,"rgb_right_size":rgb_right.size if rgb_right is not None else 0,"duration_ms":draw_right_duration},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         
         # 3. 激光雷达数据
         self._draw_lidar(perception_data.laser_ranges, perception_data.laser_angles)
@@ -119,8 +141,17 @@ class PerceptionDataVisualizer:
         
         # 使用固定布局，不每次调用tight_layout
         # plt.tight_layout(pad=2.0, h_pad=1.0, w_pad=1.0)
+        draw_start = time.time()
         plt.draw()
+        draw_duration = (time.time() - draw_start) * 1000
+        pause_start = time.time()
         plt.pause(0.05)  # 增加暂停时间以改善显示
+        pause_duration = (time.time() - pause_start) * 1000
+        visualize_total = (time.time() - visualize_start) * 1000
+        # #region agent log
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"E","location":"visualize_perception.py:visualize:123","message":"plt.draw and pause duration","data":{"draw_duration_ms":draw_duration,"pause_duration_ms":pause_duration,"visualize_total_ms":visualize_total},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
     
     def _draw_rgb_image(self, rgb_image: Optional[np.ndarray], ax, title: str = "RGB Image"):
         """绘制RGB图像"""
@@ -481,75 +512,71 @@ async def visualize_perception_loop(brain: Brain, update_interval: float = 0.5):
     
     try:
         while True:
+            # #region agent log
+            import json
+            loop_iter_start = time.time()
+            # #endregion
+            
             # 获取感知数据（参考L2测试：多次调用以确保VLM分析完成）
             # 第一次调用可能触发VLM分析
+            get_data_start = time.time()
             perception_data = await brain.sensor_manager.get_fused_perception()
-            # 如果VLM启用且有RGB图像，等待一下让VLM分析完成
-            if vlm_enabled and perception_data and perception_data.rgb_image is not None:
-                await asyncio.sleep(0.1)  # 短暂等待VLM分析
-                # 再次获取以获取VLM结果
-                perception_data = await brain.sensor_manager.get_fused_perception()
+            get_data_duration = (time.time() - get_data_start) * 1000
+            # #region agent log
+            with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"visualize_perception.py:visualize_perception_loop:486","message":"get_fused_perception duration","data":{"duration_ms":get_data_duration},"timestamp":int(time.time()*1000)})+'\n')
+            # #endregion
             
-            if perception_data:
-                # 检查是否有实际数据
-                has_data = (
-                    perception_data.pose is not None or
-                    perception_data.rgb_image is not None or
-                    perception_data.pointcloud is not None or
-                    perception_data.laser_ranges is not None or
-                    perception_data.obstacles
-                )
-                
-                if has_data:
-                    # 可视化
-                    visualizer.visualize(perception_data, frame_count)
-                    frame_count += 1
-                    no_data_count = 0
-                    
-                    # 安全地获取位姿信息
-                    pose_str = "N/A"
-                    if perception_data.pose:
-                        pose_str = f"{perception_data.pose.x:.2f}, {perception_data.pose.y:.2f}"
-                    
-                    # 显示数据状态
-                    data_status = []
-                    if perception_data.pose:
-                        data_status.append("Pose")
-                    if perception_data.rgb_image is not None:
-                        data_status.append("RGB")
-                    if perception_data.pointcloud is not None:
-                        data_status.append("PointCloud")
-                    if perception_data.laser_ranges:
-                        data_status.append("Lidar")
-                    if perception_data.obstacles:
-                        data_status.append(f"{len(perception_data.obstacles)}Obs")
-                    
-                    print(f"\rFrame #{frame_count} - "
-                          f"Pose: {pose_str} | "
-                          f"Data: {', '.join(data_status)} | "
-                          f"Semantic: {len(perception_data.semantic_objects)}", end='')
-                else:
-                    no_data_count += 1
-                    if no_data_count == 1:
-                        print("\nWARNING: No sensor data received yet. Waiting...")
-                    elif no_data_count % 10 == 0:
-                        print(f"\nStill waiting for data... (attempt {no_data_count})")
-                        # 显示传感器状态
-                        sensor_health = brain.sensor_manager.get_sensor_health()
-                        active_sensors = [name for name, healthy in sensor_health.items() if healthy]
-                        if active_sensors:
-                            print(f"  Active sensors: {', '.join(active_sensors)}")
-                        else:
-                            print("  No active sensors detected!")
-                            print("  Check ROS2 topics are publishing:")
-                            print("    ros2 topic list")
-                            print("    ros2 topic echo /chassis/odom")
-            else:
+            if perception_data is None:
                 no_data_count += 1
-                if no_data_count == 1:
-                    print("\nWARNING: perception_data is None")
+                if no_data_count > 10:
+                    logger.warning("连续10次未获取到感知数据，可能存在问题")
+                await asyncio.sleep(update_interval)
+                continue
             
-            await asyncio.sleep(update_interval)
+            no_data_count = 0
+            frame_count += 1
+            
+            # 可视化数据
+            visualize_start = time.time()
+            visualizer.visualize(perception_data, frame_count)
+            visualize_duration = (time.time() - visualize_start) * 1000
+            
+            # #region agent log
+            loop_iter_duration = (time.time() - loop_iter_start) * 1000
+            with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"visualize_perception.py:visualize_perception_loop:505","message":"full loop iteration duration","data":{"frame_count":frame_count,"get_data_ms":get_data_duration,"visualize_ms":visualize_duration,"total_ms":loop_iter_duration},"timestamp":int(time.time()*1000)})+'\n')
+            # #endregion
+            
+            # 安全地获取位姿信息
+            pose_str = "N/A"
+            if perception_data.pose:
+                pose_str = f"{perception_data.pose.x:.2f}, {perception_data.pose.y:.2f}"
+            
+            # 显示数据状态
+            data_status = []
+            if perception_data.pose:
+                data_status.append("Pose")
+            if perception_data.rgb_image is not None:
+                data_status.append("RGB")
+            if perception_data.pointcloud is not None:
+                data_status.append("PointCloud")
+            if perception_data.laser_ranges:
+                data_status.append("Lidar")
+            if perception_data.obstacles:
+                data_status.append(f"{len(perception_data.obstacles)}Obs")
+            
+            print(f"\rFrame #{frame_count} - "
+                  f"Pose: {pose_str} | "
+                  f"Data: {', '.join(data_status)} | "
+                  f"Semantic: {len(perception_data.semantic_objects)}", end='')
+            
+            # 控制更新频率（30fps = 33.3ms per frame）
+            target_frame_time = 1.0 / 30.0  # 30fps
+            elapsed = time.time() - loop_iter_start
+            sleep_time = max(0, target_frame_time - elapsed)
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
     
     except KeyboardInterrupt:
         print("\n\nVisualization stopped")
