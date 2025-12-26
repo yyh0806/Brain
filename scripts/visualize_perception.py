@@ -40,7 +40,7 @@ from brain.core.brain import Brain
 class PerceptionDataVisualizer:
     """PerceptionData可视化器"""
     
-    def __init__(self, figsize=(16, 10), vlm_enabled=False):
+    def __init__(self, figsize=(16, 10), vlm_enabled=False, sensor_manager=None):
         self.fig = plt.figure(figsize=figsize)
         self.fig.suptitle('PerceptionData Real-time Visualization', fontsize=16, fontweight='bold')
         
@@ -63,8 +63,9 @@ class PerceptionDataVisualizer:
         # 存储colorbar引用，避免重复创建
         self.occupancy_cbar = None
         
-        # VLM状态
+        # VLM状态和sensor_manager引用
         self._vlm_enabled = vlm_enabled
+        self._sensor_manager = sensor_manager  # 用于检查VLM服务状态
         
         plt.ion()  # 开启交互模式
         plt.tight_layout()
@@ -78,10 +79,22 @@ class PerceptionDataVisualizer:
         self._draw_rgb_image(perception_data.rgb_image, self.ax_rgb_left, "Left RGB")
         
         # 2. 右眼RGB图像
-        rgb_right = None
-        if hasattr(perception_data, 'rgb_image_right'):
-            rgb_right = perception_data.rgb_image_right
-        self._draw_rgb_image(rgb_right, self.ax_rgb_right, "Right RGB")
+        rgb_right = getattr(perception_data, 'rgb_image_right', None)
+        if rgb_right is not None and rgb_right.size > 0:
+            self._draw_rgb_image(rgb_right, self.ax_rgb_right, "Right RGB")
+        else:
+            # 显示调试信息
+            debug_info = f"No Right RGB Data"
+            if hasattr(perception_data, 'rgb_image_right'):
+                debug_info += f"\n(Attribute exists but is None or empty)"
+            else:
+                debug_info += f"\n(Attribute not found)"
+            self.ax_rgb_right.clear()
+            self.ax_rgb_right.text(0.5, 0.5, debug_info,
+                                   ha='center', va='center', transform=self.ax_rgb_right.transAxes,
+                                   fontsize=10, color='orange')
+            self.ax_rgb_right.set_title("Right RGB", fontsize=8)
+            self.ax_rgb_right.axis('off')
         
         # 3. 激光雷达数据
         self._draw_lidar(perception_data.laser_ranges, perception_data.laser_angles)
@@ -112,19 +125,10 @@ class PerceptionDataVisualizer:
     def _draw_rgb_image(self, rgb_image: Optional[np.ndarray], ax, title: str = "RGB Image"):
         """绘制RGB图像"""
         ax.clear()
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
         
-        if rgb_image is not None and len(rgb_image.shape) == 3:
+        if rgb_image is not None and rgb_image.size > 0 and len(rgb_image.shape) == 3:
             # 直接显示图像，不做多余的"全黑"检测
             # 图像处理已在ros2_interface中完成，这里只负责显示
-            # 确保图像方向正确（matplotlib期望的是(height, width, channels)）
-            # 如果图像是转置的，需要调整
-            if rgb_image.shape[0] < rgb_image.shape[1] and rgb_image.shape[2] == 3:
-                # 可能是(width, height, channels)，需要转置
-                if rgb_image.shape[0] < 1000:  # 宽度通常不会这么小
-                    rgb_image = np.transpose(rgb_image, (1, 0, 2))
-            
             # 确保数据类型正确
             if rgb_image.dtype != np.uint8:
                 if rgb_image.max() <= 1.0:
@@ -132,7 +136,8 @@ class PerceptionDataVisualizer:
                 else:
                     rgb_image = rgb_image.astype(np.uint8)
             
-            ax.imshow(rgb_image, aspect='auto')
+            # 直接显示图像，让matplotlib自动设置坐标轴范围
+            ax.imshow(rgb_image, aspect='auto', interpolation='nearest')
             img_min, img_max = rgb_image.min(), rgb_image.max()
             ax.set_title(f'{title}\nShape: {rgb_image.shape}\nRange: [{img_min}, {img_max}]', fontsize=8)
         else:
@@ -403,14 +408,24 @@ class PerceptionDataVisualizer:
         info_lines.append(f"  Pose: {'✓' if perception_data.pose else '✗'}")
         
         # VLM状态和全局地图信息
-        if hasattr(self, '_vlm_enabled'):
-            vlm_status = "Enabled" if self._vlm_enabled else "Disabled"
-            info_lines.append(f"\nVLM Status: {vlm_status}")
-            if self._vlm_enabled:
-                if perception_data.rgb_image is None:
-                    info_lines.append("  Waiting for RGB image...")
-                else:
-                    info_lines.append("  Ready to analyze")
+        # 检查VLM是否真正可用（优先检查sensor_manager的_vlm_service）
+        vlm_available = False
+        if self._sensor_manager and hasattr(self._sensor_manager, '_vlm_service'):
+            vlm_available = self._sensor_manager._vlm_service is not None
+        elif hasattr(self, '_vlm_enabled') and self._vlm_enabled:
+            vlm_available = True
+        elif hasattr(perception_data, 'semantic_objects') and perception_data.semantic_objects:
+            vlm_available = True
+        elif hasattr(perception_data, 'scene_description') and perception_data.scene_description:
+            vlm_available = True
+        
+        vlm_status = "Enabled" if vlm_available else "Disabled"
+        info_lines.append(f"\nVLM Status: {vlm_status}")
+        if vlm_available:
+            if perception_data.rgb_image is None:
+                info_lines.append("  Waiting for RGB image...")
+            else:
+                info_lines.append("  Ready to analyze")
             
             # 显示全局地图信息
             if hasattr(perception_data, 'global_map') and perception_data.global_map is not None:
@@ -460,7 +475,7 @@ async def visualize_perception_loop(brain: Brain, update_interval: float = 0.5):
         hasattr(brain.sensor_manager, '_vlm_service') and 
         brain.sensor_manager._vlm_service is not None
     )
-    visualizer = PerceptionDataVisualizer(vlm_enabled=vlm_enabled)
+    visualizer = PerceptionDataVisualizer(vlm_enabled=vlm_enabled, sensor_manager=brain.sensor_manager)
     frame_count = 0
     no_data_count = 0
     
