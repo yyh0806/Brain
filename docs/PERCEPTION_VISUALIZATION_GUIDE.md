@@ -158,3 +158,5 @@ grep -A 5 "vlm:" config/environments/isaac_sim/nova_carter.yaml
 - 显示已探索区域百分比
 - 显示障碍物密度
 
+
+

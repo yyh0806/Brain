@@ -272,11 +272,20 @@ class ROS2Interface:
     
     async def _spin_ros2_async(self):
         """异步spin ROS2节点"""
+        spin_count = 0
         while self._running and rclpy.ok():
             if self._executor:
                 self._executor.spin_once(timeout_sec=0.1)
             else:
                 rclpy.spin_once(self._node, timeout_sec=0.1)
+            spin_count += 1
+            # #region agent log
+            if spin_count % 100 == 0:  # 每100次记录一次
+                import json
+                import time
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"P","location":"ros2_interface.py:_spin_ros2_async","message":"ROS2 spin loop","data":{"spin_count":spin_count,"running":self._running,"rclpy_ok":rclpy.ok()},"timestamp":int(time.time()*1000)})+'\n')
+            # #endregion
             await asyncio.sleep(0.01)  # 让出控制权
     
     async def _init_ros2(self):
@@ -471,12 +480,22 @@ class ROS2Interface:
     def _rgb_callback(self, msg):
         """RGB图像回调（左眼，未压缩）"""
         logger.debug(f"收到RGB图像（左眼）: {msg.width}x{msg.height}, encoding={msg.encoding}, data_size={len(msg.data)}")
+        # #region agent log
+        import json
+        import time
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_rgb_callback:entry","message":"RGB callback entry","data":{"width":msg.width,"height":msg.height,"encoding":msg.encoding,"data_size":len(msg.data)},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         with self._data_lock:
             # 将ROS Image消息转换为numpy数组
             rgb_image = self._image_msg_to_numpy(msg)
             if rgb_image is not None:
                 self._sensor_data.rgb_image = rgb_image
                 self._sensor_data.timestamp = datetime.now()
+                # #region agent log
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_rgb_callback:updated","message":"RGB data updated in sensor_data","data":{"shape":list(rgb_image.shape) if rgb_image is not None else None},"timestamp":int(time.time()*1000)})+'\n')
+                # #endregion
                 logger.debug(f"RGB图像（左眼）转换成功: shape={rgb_image.shape}, dtype={rgb_image.dtype}, range=[{rgb_image.min()}, {rgb_image.max()}]")
             else:
                 logger.warning(f"RGB图像（左眼）转换失败: {msg.width}x{msg.height}, encoding={msg.encoding}")
@@ -484,6 +503,11 @@ class ROS2Interface:
     
     def _rgb_right_callback(self, msg):
         """RGB图像回调（右眼，未压缩）"""
+        # #region agent log
+        import json
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ros2_interface.py:_rgb_right_callback:485","message":"Right RGB callback entry","data":{"width":msg.width,"height":msg.height,"encoding":msg.encoding,"data_size":len(msg.data)},"timestamp":int(datetime.now().timestamp()*1000)})+'\n')
+        # #endregion
         logger.debug(f"收到RGB图像（右眼）: {msg.width}x{msg.height}, encoding={msg.encoding}, data_size={len(msg.data)}")
         with self._data_lock:
             # 将ROS Image消息转换为numpy数组
@@ -491,8 +515,16 @@ class ROS2Interface:
             if rgb_image is not None:
                 self._sensor_data.rgb_image_right = rgb_image
                 self._sensor_data.timestamp = datetime.now()
+                # #region agent log
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ros2_interface.py:_rgb_right_callback:492","message":"Right RGB stored in sensor_data","data":{"shape":list(rgb_image.shape),"dtype":str(rgb_image.dtype),"min":int(rgb_image.min()),"max":int(rgb_image.max())},"timestamp":int(datetime.now().timestamp()*1000)})+'\n')
+                # #endregion
                 logger.debug(f"RGB图像（右眼）转换成功: shape={rgb_image.shape}, dtype={rgb_image.dtype}, range=[{rgb_image.min()}, {rgb_image.max()}]")
             else:
+                # #region agent log
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ros2_interface.py:_rgb_right_callback:496","message":"Right RGB conversion failed","data":{"width":msg.width,"height":msg.height,"encoding":msg.encoding},"timestamp":int(datetime.now().timestamp()*1000)})+'\n')
+                # #endregion
                 logger.warning(f"RGB图像（右眼）转换失败: {msg.width}x{msg.height}, encoding={msg.encoding}")
         self._trigger_callbacks("rgb_image_right")
     
@@ -531,6 +563,12 @@ class ROS2Interface:
     
     def _laser_callback(self, msg):
         """激光雷达回调"""
+        # #region agent log
+        import json
+        import time
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_laser_callback:entry","message":"Laser callback entry","data":{"ranges_len":len(msg.ranges)},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         with self._data_lock:
             self._sensor_data.laser_scan = {
                 "ranges": list(msg.ranges),
@@ -545,6 +583,12 @@ class ROS2Interface:
     
     def _odom_callback(self, msg):
         """里程计回调"""
+        # #region agent log
+        import json
+        import time
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_odom_callback:entry","message":"Odometry callback entry","data":{"x":msg.pose.pose.position.x,"y":msg.pose.pose.position.y,"z":msg.pose.pose.position.z},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         with self._data_lock:
             self._sensor_data.odometry = {
                 "position": {
@@ -628,6 +672,12 @@ class ROS2Interface:
                     self._sensor_data.pointcloud = np.array(points, dtype=np.float32)
                     self._sensor_data.timestamp = datetime.now()
                     self._callback_counts["pointcloud"] = self._callback_counts.get("pointcloud", 0) + 1
+                    # #region agent log
+                    import json
+                    import time
+                    with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_pointcloud_callback:updated","message":"Pointcloud data updated in sensor_data","data":{"pointcloud_len":len(points),"shape":list(self._sensor_data.pointcloud.shape) if self._sensor_data.pointcloud is not None else None},"timestamp":int(time.time()*1000)})+'\n')
+                    # #endregion
                 self._trigger_callbacks("pointcloud")
                 logger.debug(f"收到点云数据: {len(points)} 个点")
         except Exception as e:
@@ -876,6 +926,7 @@ class ROS2Interface:
             return SensorData(
                 timestamp=self._sensor_data.timestamp,
                 rgb_image=self._sensor_data.rgb_image.copy() if self._sensor_data.rgb_image is not None else None,
+                rgb_image_right=self._sensor_data.rgb_image_right.copy() if self._sensor_data.rgb_image_right is not None else None,
                 depth_image=self._sensor_data.depth_image.copy() if self._sensor_data.depth_image is not None else None,
                 laser_scan=self._sensor_data.laser_scan.copy() if self._sensor_data.laser_scan else None,
                 pointcloud=self._sensor_data.pointcloud.copy() if self._sensor_data.pointcloud is not None else None,
