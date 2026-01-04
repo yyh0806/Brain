@@ -12,7 +12,7 @@ from enum import Enum
 
 # 导入 VLM 相关类型（可选）
 try:
-    from brain.perception.vlm_perception import BoundingBox
+    from brain.perception.vlm.vlm_perception import BoundingBox
     VLM_AVAILABLE = True
 except ImportError:
     VLM_AVAILABLE = False
@@ -115,6 +115,11 @@ class ExplorationFrontier:
     expected_info_gain: float = 0.5
     
     timestamp: datetime = field(default_factory=datetime.now)
+
+
+
+
+
 
 
 

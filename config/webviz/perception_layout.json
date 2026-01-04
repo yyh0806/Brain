@@ -1,0 +1,127 @@
+{
+  "panels": {
+    "ThreeDimensionalViz": {
+      "title": "3D Visualization",
+      "config": {
+        "topics": {
+          "/front_3d_lidar/lidar_points": {
+            "visible": true,
+            "color": "#ff0000",
+            "size": 0.05,
+            "colorBy": "intensity"
+          },
+          "/chassis/odom": {
+            "visible": true,
+            "color": "#00ff00"
+          }
+        },
+        "cameraState": {
+          "distance": 15,
+          "perspective": true,
+          "target": [0, 0, 0]
+        },
+        "settings": {
+          "axes": {
+            "x": { "visible": true },
+            "y": { "visible": true },
+            "z": { "visible": true }
+          }
+        }
+      }
+    },
+    "ImageView": {
+      "title": "RGB Camera",
+      "config": {
+        "imageTopic": "/front_stereo_camera/left/image_raw",
+        "synchronize": true,
+        "scale": 1.0
+      }
+    },
+    "Plot": {
+      "title": "IMU and Odometry",
+      "config": {
+        "paths": [
+          {
+            "value": "/chassis/odom.pose.pose.position.x",
+            "color": "#ff0000",
+            "label": "X Position",
+            "lineWidth": 2
+          },
+          {
+            "value": "/chassis/odom.pose.pose.position.y",
+            "color": "#00ff00",
+            "label": "Y Position",
+            "lineWidth": 2
+          },
+          {
+            "value": "/chassis/imu.linear_acceleration.x",
+            "color": "#0000ff",
+            "label": "Accel X",
+            "lineWidth": 1
+          },
+          {
+            "value": "/chassis/imu.linear_acceleration.y",
+            "color": "#0000ff",
+            "label": "Accel Y",
+            "lineWidth": 1
+          },
+          {
+            "value": "/chassis/imu.angular_velocity.z",
+            "color": "#ff00ff",
+            "label": "Angular Z",
+            "lineWidth": 1
+          }
+        ],
+        "xAxis": "time",
+        "xAxisVal": "timestamp",
+        "showLegend": true
+      }
+    },
+    "Map": {
+      "title": "Occupancy Grid",
+      "config": {
+        "mapTopic": "/map",
+        "colorScheme": "map",
+        "showPath": true,
+        "robotBase": "base_link"
+      }
+    },
+    "RawMessages": {
+      "title": "World Model State",
+      "config": {
+        "topic": "/world_model",
+        "subscribePreload": true
+      }
+    },
+    "Rosout": {
+      "title": "ROS Logs",
+      "config": {
+        "topic": "/rosout"
+      }
+    }
+  },
+  "layout": {
+    "direction": "row",
+    "first": "ThreeDimensionalViz",
+    "second": {
+      "direction": "column",
+      "first": "ImageView",
+      "second": {
+        "direction": "column",
+        "first": "Map",
+        "second": {
+          "direction": "column",
+          "first": "Plot",
+          "second": {
+            "direction": "row",
+            "first": "RawMessages",
+            "second": "Rosout"
+          }
+        }
+      }
+    }
+  }
+}
+
+
+

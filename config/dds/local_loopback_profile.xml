@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+    <!-- 本地回环传输配置文件 -->
+    <transport_descriptors>
+        <!-- 共享内存传输 -->
+        <transport_descriptor>
+            <transport_id>shared_memory_transport</transport_id>
+            <type>SHM</type>
+        </transport_descriptor>
+
+        <!-- 本地UDP传输（仅127.0.0.1） -->
+        <transport_descriptor>
+            <transport_id>local_udp</transport_id>
+            <type>UDPv4</type>
+            <sendBufferSize>65536</sendBufferSize>
+            <receiveBufferSize>65536</receiveBufferSize>
+            <non_blocking_send>true</non_blocking_send>
+            <interfaceWhiteList>
+                <address>127.0.0.1</address>
+            </interfaceWhiteList>
+            <!-- 只绑定到本地回环 -->
+            <bind_to_ip_address>127.0.0.1</bind_to_ip_address>
+            <!-- 禁用组播 -->
+            <enable_multicast>false</enable_multicast>
+        </transport_descriptor>
+    </transport_descriptors>
+
+    <!-- 参与者配置 -->
+    <participant profile_name="local_loopback_participant" is_default_profile="true">
+        <!-- 只使用本地传输 -->
+        <rtps>
+            <userTransports>
+                <transport_id>shared_memory_transport</transport_id>
+                <transport_id>local_udp</transport_id>
+            </userTransports>
+            <useBuiltinTransports>false</useBuiltinTransports>
+
+            <!-- 发现配置 -->
+            <builtin>
+                <discovery_config>
+                    <!-- 禁用组播发现 -->
+                    <EDP>STATIC</EDP>
+                    <simpleEDP>
+                        <PUBWRITER_SUBREADER>true</PUBWRITER_SUBREADER>
+                        <SUBWRITER_PUBREADER>true</SUBWRITER_PUBREADER>
+                    </simpleEDP>
+
+                    <!-- 只监听本地 -->
+                    <discoveryProtocol>SIMPLE</discoveryProtocol>
+                    <ignore_NON_PARTICIPANT_MESSAGES>true</ignore_NON_PARTICIPANT_MESSAGES>
+
+                    <!-- 静态发现列表 -->
+                    <staticEDPXMLConfigs>
+                        <participant_profile>local_loopback_participant</participant_profile>
+                    </staticEDPXMLConfigs>
+                </discovery_config>
+
+                <!-- 发现超时配置 -->
+                <initialPeersList>
+                    <locator>
+                        <udpv4>
+                            <address>127.0.0.1</address>
+                            <port>7400</port>
+                        </udpv4>
+                    </locator>
+                </initialPeersList>
+            </builtin>
+
+            <!-- 只允许本地通信 -->
+            <port>7400</port>
+            <external_locators>false</external_locators>
+            <default_unicast_locators>
+                <locator>
+                    <udpv4>
+                        <address>127.0.0.1</address>
+                        <port>7400</port>
+                    </udpv4>
+                </locator>
+            </default_unicast_locators>
+
+            <!-- 禁用多播 -->
+            <use_Builtin_Transports>false</use_Builtin_Transports>
+
+            <!-- 缓冲区配置 -->
+            <builtinTransports>
+                <udp_builtin>
+                    <sendBufferSize>65536</sendBufferSize>
+                    <receiveBufferSize>65536</receiveBufferSize>
+                    <non_blocking_send>true</non_blocking_send>
+                    <!-- 只绑定到本地回环 -->
+                    <interfaceWhiteList>
+                        <address>127.0.0.1</address>
+                    </interfaceWhiteList>
+                    <!-- 禁用组播 -->
+                    <enable_multicast>false</enable_multicast>
+                </udp_builtin>
+            </builtinTransports>
+
+            <!-- 资源限制 -->
+            <resourceLimits>
+                <max_partitions>1</max_partitions>
+                <max_user_data>0</max_user_data>
+            </resourceLimits>
+
+            <!-- 可靠性配置 -->
+            <reliability>
+                <kind>RELIABLE</kind>
+                <max_blocking_time>
+                    <sec>0</sec>
+                    <nanosec>100000000</nanosec>
+                </max_blocking_time>
+            </reliability>
+        </rtps>
+
+        <!-- 性能优化 -->
+        <properties>
+            <property>
+                <name>fastdds.disable_discovery_multicast</name>
+                <value>true</value>
+            </property>
+            <property>
+                <name>fastdds.rtps.allow_multicast</name>
+                <value>false</value>
+            </property>
+            <property>
+                <name>fastdds.statistics.ENABLE</name>
+                <value>false</value>
+            </property>
+        </properties>
+    </participant>
+
+    <!-- 数据读者配置 -->
+    <data_reader profile_name="local_loopback_reader" is_default_profile="true">
+        <historyMemoryPolicy>PREALLOCATED_WITH_REALLOC_MEMORY_MODE</historyMemoryPolicy>
+        <qos>
+            <reliability>
+                <kind>RELIABLE</kind>
+            </reliability>
+            <durability>
+                <kind>VOLATILE</kind>
+            </durability>
+            <history>
+                <kind>KEEP_LAST</kind>
+                <depth>10</depth>
+            </history>
+        </qos>
+    </data_reader>
+
+    <!-- 数据写入者配置 -->
+    <data_writer profile_name="local_loopback_writer" is_default_profile="true">
+        <historyMemoryPolicy>PREALLOCATED_WITH_REALLOC_MEMORY_MODE</historyMemoryPolicy>
+        <qos>
+            <reliability>
+                <kind>RELIABLE</kind>
+            </reliability>
+            <durability>
+                <kind>VOLATILE</kind>
+            </durability>
+            <history>
+                <kind>KEEP_LAST</kind>
+                <depth>10</depth>
+            </history>
+        </qos>
+    </data_writer>
+</profiles>
+
+
+
+

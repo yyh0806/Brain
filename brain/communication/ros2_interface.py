@@ -145,7 +145,8 @@ class SensorData:
     timestamp: datetime = field(default_factory=datetime.now)
     
     # 图像数据
-    rgb_image: Optional[np.ndarray] = None
+    rgb_image: Optional[np.ndarray] = None  # 左眼RGB图像
+    rgb_image_right: Optional[np.ndarray] = None  # 右眼RGB图像
     depth_image: Optional[np.ndarray] = None
     
     # 激光雷达
@@ -203,10 +204,19 @@ class ROS2Interface:
         self.config = config or ROS2Config()
 
         # 确定运行模式
-        if ROS2_AVAILABLE and self.config.mode == ROS2Mode.REAL:
-            self.mode = ROS2Mode.REAL
+        if self.config.mode == ROS2Mode.REAL:
+            if ROS2_AVAILABLE:
+                self.mode = ROS2Mode.REAL
+                logger.info("使用真实ROS2环境模式")
+            else:
+                logger.warning("配置要求真实ROS2模式，但ROS2不可用，回退到模拟模式")
+                self.mode = ROS2Mode.SIMULATION
         else:
             self.mode = ROS2Mode.SIMULATION
+            if not ROS2_AVAILABLE:
+                logger.info("使用模拟模式（ROS2不可用）")
+            else:
+                logger.info("使用模拟模式（配置指定）")
 
         # ROS2节点（仅在真实模式下使用）
         self._node: Optional[Any] = None
@@ -262,11 +272,20 @@ class ROS2Interface:
     
     async def _spin_ros2_async(self):
         """异步spin ROS2节点"""
+        spin_count = 0
         while self._running and rclpy.ok():
             if self._executor:
                 self._executor.spin_once(timeout_sec=0.1)
             else:
                 rclpy.spin_once(self._node, timeout_sec=0.1)
+            spin_count += 1
+            # #region agent log
+            if spin_count % 100 == 0:  # 每100次记录一次
+                import json
+                import time
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"P","location":"ros2_interface.py:_spin_ros2_async","message":"ROS2 spin loop","data":{"spin_count":spin_count,"running":self._running,"rclpy_ok":rclpy.ok()},"timestamp":int(time.time()*1000)})+'\n')
+            # #endregion
             await asyncio.sleep(0.01)  # 让出控制权
     
     async def _init_ros2(self):
@@ -276,60 +295,96 @@ class ROS2Interface:
         
         self._node = rclpy.create_node(self.config.node_name)
         
-        # 创建发布者
-        self._publishers["cmd_vel"] = self._node.create_publisher(
-            Twist,
-            self.config.topics["cmd_vel"],
-            self.config.cmd_qos_depth
-        )
+        # 创建发布者（如果配置中存在cmd_vel话题）
+        cmd_vel_topic = self.config.topics.get("cmd_vel")
+        if cmd_vel_topic:
+            self._publishers["cmd_vel"] = self._node.create_publisher(
+                Twist,
+                cmd_vel_topic,
+                self.config.cmd_qos_depth
+            )
+            logger.info(f"创建速度命令发布者: {cmd_vel_topic}")
+        else:
+            logger.warning("未配置cmd_vel话题，无法发布速度命令")
         
         # 创建订阅者 - 使用sensor_data QoS（适合图像数据）
         from rclpy.qos import qos_profile_sensor_data
         qos = qos_profile_sensor_data
         
-        # RGB图像订阅 - 根据配置选择Image或CompressedImage
-        # 默认尝试CompressedImage（更常见），如果失败再试Image
-        use_compressed = self.config.topics.get("rgb_image_compressed", True)
-        if use_compressed:
-            try:
-                self._subscribers["rgb_image"] = self._node.create_subscription(
-                    CompressedImage,
-                    self.config.topics["rgb_image"],
-                    self._rgb_compressed_callback,
-                    qos
-                )
-                logger.info(f"订阅压缩图像: {self.config.topics['rgb_image']}")
-            except Exception as e:
-                logger.warning(f"订阅CompressedImage失败，尝试Image: {e}")
+        # RGB图像订阅 - 左眼（根据配置选择Image或CompressedImage）
+        rgb_image_topic = self.config.topics.get("rgb_image")
+        if rgb_image_topic:
+            # 根据配置决定是否使用压缩图像
+            use_compressed = self.config.topics.get("rgb_image_compressed", False)
+            if use_compressed:
+                try:
+                    self._subscribers["rgb_image"] = self._node.create_subscription(
+                        CompressedImage,
+                        rgb_image_topic,
+                        self._rgb_compressed_callback,
+                        qos
+                    )
+                    logger.info(f"订阅压缩图像（左眼）: {rgb_image_topic}")
+                except Exception as e:
+                    logger.warning(f"订阅CompressedImage失败，尝试Image: {e}")
+                    self._subscribers["rgb_image"] = self._node.create_subscription(
+                        Image,
+                        rgb_image_topic,
+                        self._rgb_callback,
+                        qos
+                    )
+                    logger.info(f"订阅RGB图像话题（左眼）: {rgb_image_topic}")
+            else:
+                # 直接订阅Image类型（Nova Carter使用Image，不是CompressedImage）
                 self._subscribers["rgb_image"] = self._node.create_subscription(
                     Image,
-                    self.config.topics["rgb_image"],
+                    rgb_image_topic,
                     self._rgb_callback,
                     qos
                 )
+                logger.info(f"订阅RGB图像话题（左眼）: {rgb_image_topic}")
         else:
-            self._subscribers["rgb_image"] = self._node.create_subscription(
+            logger.warning("未配置RGB图像话题（左眼）")
+        
+        # RGB图像订阅 - 右眼
+        rgb_image_right_topic = self.config.topics.get("rgb_image_right")
+        if rgb_image_right_topic:
+            # 右眼也使用Image类型
+            self._subscribers["rgb_image_right"] = self._node.create_subscription(
                 Image,
-                self.config.topics["rgb_image"],
-                self._rgb_callback,
+                rgb_image_right_topic,
+                self._rgb_right_callback,
                 qos
             )
+            logger.info(f"订阅RGB图像话题（右眼）: {rgb_image_right_topic}")
+        else:
+            logger.debug("未配置RGB图像话题（右眼）")
         
-        # 深度图像订阅
-        self._subscribers["depth_image"] = self._node.create_subscription(
-            Image,
-            self.config.topics["depth_image"],
-            self._depth_callback,
-            qos
-        )
+        # 深度图像订阅（如果配置中存在）
+        depth_image_topic = self.config.topics.get("depth_image")
+        if depth_image_topic:
+            self._subscribers["depth_image"] = self._node.create_subscription(
+                Image,
+                depth_image_topic,
+                self._depth_callback,
+                qos
+            )
+            logger.info(f"订阅深度图像话题: {depth_image_topic}")
+        else:
+            logger.debug("未配置深度图像话题")
         
-        # 激光雷达订阅
-        self._subscribers["laser_scan"] = self._node.create_subscription(
-            LaserScan,
-            self.config.topics["laser_scan"],
-            self._laser_callback,
-            qos
-        )
+        # 激光雷达订阅（如果配置中存在）
+        laser_scan_topic = self.config.topics.get("laser_scan")
+        if laser_scan_topic:
+            self._subscribers["laser_scan"] = self._node.create_subscription(
+                LaserScan,
+                laser_scan_topic,
+                self._laser_callback,
+                qos
+            )
+            logger.info(f"订阅激光雷达话题: {laser_scan_topic}")
+        else:
+            logger.debug("未配置激光雷达话题")
         
         # 里程计订阅
         odom_topic = self.config.topics.get("odom", "/odom")
@@ -423,17 +478,60 @@ class ROS2Interface:
     # === ROS2回调函数 ===
     
     def _rgb_callback(self, msg):
-        """RGB图像回调（未压缩）"""
+        """RGB图像回调（左眼，未压缩）"""
+        logger.debug(f"收到RGB图像（左眼）: {msg.width}x{msg.height}, encoding={msg.encoding}, data_size={len(msg.data)}")
+        # #region agent log
+        import json
+        import time
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_rgb_callback:entry","message":"RGB callback entry","data":{"width":msg.width,"height":msg.height,"encoding":msg.encoding,"data_size":len(msg.data)},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         with self._data_lock:
             # 将ROS Image消息转换为numpy数组
-            self._sensor_data.rgb_image = self._image_msg_to_numpy(msg)
-            self._sensor_data.timestamp = datetime.now()
+            rgb_image = self._image_msg_to_numpy(msg)
+            if rgb_image is not None:
+                self._sensor_data.rgb_image = rgb_image
+                self._sensor_data.timestamp = datetime.now()
+                # #region agent log
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_rgb_callback:updated","message":"RGB data updated in sensor_data","data":{"shape":list(rgb_image.shape) if rgb_image is not None else None},"timestamp":int(time.time()*1000)})+'\n')
+                # #endregion
+                logger.debug(f"RGB图像（左眼）转换成功: shape={rgb_image.shape}, dtype={rgb_image.dtype}, range=[{rgb_image.min()}, {rgb_image.max()}]")
+            else:
+                logger.warning(f"RGB图像（左眼）转换失败: {msg.width}x{msg.height}, encoding={msg.encoding}")
         self._trigger_callbacks("rgb_image")
+    
+    def _rgb_right_callback(self, msg):
+        """RGB图像回调（右眼，未压缩）"""
+        # #region agent log
+        import json
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ros2_interface.py:_rgb_right_callback:485","message":"Right RGB callback entry","data":{"width":msg.width,"height":msg.height,"encoding":msg.encoding,"data_size":len(msg.data)},"timestamp":int(datetime.now().timestamp()*1000)})+'\n')
+        # #endregion
+        logger.debug(f"收到RGB图像（右眼）: {msg.width}x{msg.height}, encoding={msg.encoding}, data_size={len(msg.data)}")
+        with self._data_lock:
+            # 将ROS Image消息转换为numpy数组
+            rgb_image = self._image_msg_to_numpy(msg)
+            if rgb_image is not None:
+                self._sensor_data.rgb_image_right = rgb_image
+                self._sensor_data.timestamp = datetime.now()
+                # #region agent log
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ros2_interface.py:_rgb_right_callback:492","message":"Right RGB stored in sensor_data","data":{"shape":list(rgb_image.shape),"dtype":str(rgb_image.dtype),"min":int(rgb_image.min()),"max":int(rgb_image.max())},"timestamp":int(datetime.now().timestamp()*1000)})+'\n')
+                # #endregion
+                logger.debug(f"RGB图像（右眼）转换成功: shape={rgb_image.shape}, dtype={rgb_image.dtype}, range=[{rgb_image.min()}, {rgb_image.max()}]")
+            else:
+                # #region agent log
+                with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                    f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"ros2_interface.py:_rgb_right_callback:496","message":"Right RGB conversion failed","data":{"width":msg.width,"height":msg.height,"encoding":msg.encoding},"timestamp":int(datetime.now().timestamp()*1000)})+'\n')
+                # #endregion
+                logger.warning(f"RGB图像（右眼）转换失败: {msg.width}x{msg.height}, encoding={msg.encoding}")
+        self._trigger_callbacks("rgb_image_right")
     
     def _rgb_compressed_callback(self, msg):
         """RGB压缩图像回调"""
         self._callback_counts["rgb_image"] = self._callback_counts.get("rgb_image", 0) + 1
-        logger.debug(f"收到压缩图像消息 #{self._callback_counts['rgb_image']}, 数据大小: {len(msg.data)} bytes")
+        logger.debug(f"收到压缩图像消息 #{self._callback_counts['rgb_image']}, 数据大小: {len(msg.data)} bytes, format={msg.format}")
         try:
             import cv2
             # 解压缩图像
@@ -465,6 +563,12 @@ class ROS2Interface:
     
     def _laser_callback(self, msg):
         """激光雷达回调"""
+        # #region agent log
+        import json
+        import time
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_laser_callback:entry","message":"Laser callback entry","data":{"ranges_len":len(msg.ranges)},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         with self._data_lock:
             self._sensor_data.laser_scan = {
                 "ranges": list(msg.ranges),
@@ -479,6 +583,12 @@ class ROS2Interface:
     
     def _odom_callback(self, msg):
         """里程计回调"""
+        # #region agent log
+        import json
+        import time
+        with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+            f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_odom_callback:entry","message":"Odometry callback entry","data":{"x":msg.pose.pose.position.x,"y":msg.pose.pose.position.y,"z":msg.pose.pose.position.z},"timestamp":int(time.time()*1000)})+'\n')
+        # #endregion
         with self._data_lock:
             self._sensor_data.odometry = {
                 "position": {
@@ -562,6 +672,12 @@ class ROS2Interface:
                     self._sensor_data.pointcloud = np.array(points, dtype=np.float32)
                     self._sensor_data.timestamp = datetime.now()
                     self._callback_counts["pointcloud"] = self._callback_counts.get("pointcloud", 0) + 1
+                    # #region agent log
+                    import json
+                    import time
+                    with open('/media/yangyuhui/CODES1/Brain/.cursor/debug.log', 'a') as f:
+                        f.write(json.dumps({"sessionId":"debug-session","runId":"run1","hypothesisId":"N","location":"ros2_interface.py:_pointcloud_callback:updated","message":"Pointcloud data updated in sensor_data","data":{"pointcloud_len":len(points),"shape":list(self._sensor_data.pointcloud.shape) if self._sensor_data.pointcloud is not None else None},"timestamp":int(time.time()*1000)})+'\n')
+                    # #endregion
                 self._trigger_callbacks("pointcloud")
                 logger.debug(f"收到点云数据: {len(points)} 个点")
         except Exception as e:
@@ -610,15 +726,72 @@ class ROS2Interface:
             return data.reshape(msg.height, msg.width)
         else:
             # RGB图像
-            data_array = np.frombuffer(msg.data, dtype=np.uint8)
-            try:
-                return data_array.reshape(msg.height, msg.width, 3)
-            except ValueError:
-                # 如果reshape失败，尝试使用step字段（处理padding情况）
-                if msg.step > 0 and msg.step >= msg.width * 3:
-                    reshaped_step = data_array[:msg.step*msg.height].reshape(msg.height, msg.step)
-                    return reshaped_step[:, :msg.width*3].reshape(msg.height, msg.width, 3)
-                raise
+            # 检查编码格式
+            encoding = msg.encoding.lower()
+            logger.debug(f"RGB图像编码: {encoding}, 尺寸: {msg.width}x{msg.height}, 数据大小: {len(msg.data)} bytes")
+            
+            # 根据编码格式处理
+            if encoding in ['rgb8', 'bgr8']:
+                # 8位RGB/BGR图像，每个像素3字节
+                expected_size = msg.height * msg.width * 3
+                if len(msg.data) < expected_size:
+                    logger.warning(f"RGB图像数据大小不足: 期望{expected_size}字节, 实际{len(msg.data)}字节")
+                    return None
+                
+                data_array = np.frombuffer(msg.data, dtype=np.uint8)
+                try:
+                    img = data_array[:expected_size].reshape(msg.height, msg.width, 3)
+                    # 如果是BGR，转换为RGB
+                    if encoding == 'bgr8':
+                        import cv2
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                    logger.debug(f"RGB图像转换成功: shape={img.shape}, dtype={img.dtype}, range=[{img.min()}, {img.max()}]")
+                    return img
+                except ValueError as e:
+                    logger.warning(f"RGB图像reshape失败: {e}, 尝试使用step字段")
+                    # 如果reshape失败，尝试使用step字段（处理padding情况）
+                    if msg.step > 0 and msg.step >= msg.width * 3:
+                        reshaped_step = data_array[:msg.step*msg.height].reshape(msg.height, msg.step)
+                        img = reshaped_step[:, :msg.width*3].reshape(msg.height, msg.width, 3)
+                        if encoding == 'bgr8':
+                            import cv2
+                            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                        logger.debug(f"RGB图像转换成功(使用step): shape={img.shape}, dtype={img.dtype}, range=[{img.min()}, {img.max()}]")
+                        return img
+                    logger.error(f"RGB图像转换失败: {e}")
+                    return None
+            elif encoding in ['rgba8', 'bgra8']:
+                # 8位RGBA/BGRA图像，每个像素4字节
+                expected_size = msg.height * msg.width * 4
+                if len(msg.data) < expected_size:
+                    logger.warning(f"RGBA图像数据大小不足: 期望{expected_size}字节, 实际{len(msg.data)}字节")
+                    return None
+                
+                data_array = np.frombuffer(msg.data, dtype=np.uint8)
+                try:
+                    img = data_array[:expected_size].reshape(msg.height, msg.width, 4)
+                    # 如果是BGRA，转换为RGBA
+                    if encoding == 'bgra8':
+                        import cv2
+                        img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGBA)
+                    # 移除Alpha通道，转换为RGB
+                    img = img[:, :, :3]
+                    logger.debug(f"RGBA图像转换成功: shape={img.shape}, dtype={img.dtype}, range=[{img.min()}, {img.max()}]")
+                    return img
+                except ValueError as e:
+                    logger.error(f"RGBA图像转换失败: {e}")
+                    return None
+            else:
+                logger.warning(f"不支持的RGB图像编码格式: {encoding}, 尝试默认处理")
+                # 尝试默认处理（假设是RGB8）
+                data_array = np.frombuffer(msg.data, dtype=np.uint8)
+                try:
+                    img = data_array.reshape(msg.height, msg.width, 3)
+                    logger.debug(f"RGB图像转换成功(默认): shape={img.shape}, dtype={img.dtype}, range=[{img.min()}, {img.max()}]")
+                    return img
+                except ValueError as e:
+                    logger.error(f"RGB图像默认转换失败: {e}")
+                    return None
     
     def _trigger_callbacks(self, sensor_type: str):
         """触发传感器回调"""
@@ -753,6 +926,7 @@ class ROS2Interface:
             return SensorData(
                 timestamp=self._sensor_data.timestamp,
                 rgb_image=self._sensor_data.rgb_image.copy() if self._sensor_data.rgb_image is not None else None,
+                rgb_image_right=self._sensor_data.rgb_image_right.copy() if self._sensor_data.rgb_image_right is not None else None,
                 depth_image=self._sensor_data.depth_image.copy() if self._sensor_data.depth_image is not None else None,
                 laser_scan=self._sensor_data.laser_scan.copy() if self._sensor_data.laser_scan else None,
                 pointcloud=self._sensor_data.pointcloud.copy() if self._sensor_data.pointcloud is not None else None,
