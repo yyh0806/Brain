@@ -80,7 +80,7 @@ class WorldModel:
         self.config = config or {}
 
         # 占据地图
-        from brain.perception.mapping.occupancy import OccupancyMapper
+        from brain.perception.mapping.occupancy_mapper import OccupancyMapper
         self.occupancy_mapper = OccupancyMapper(
             resolution=resolution,
             map_size=map_size,
@@ -142,7 +142,7 @@ class WorldModel:
         # 转换位姿为元组格式
         pose = None
         if has_pose and perception_data.pose:
-            pose = (perception_data.pose.x, perception_data.pose.y, perception_data.pose.yaw)
+            pose = (perception_data.pose.x, perception_data.pose.y, perception_data.pose.theta)
 
         # 从激光雷达更新（优先）
         if has_laser and perception_data.laser_ranges and perception_data.laser_angles:
@@ -374,7 +374,7 @@ class WorldModel:
     def reset(self) -> None:
         """重置世界模型"""
         # 重置占据地图
-        from brain.perception.mapping.occupancy import OccupancyMapper
+        from brain.perception.mapping.occupancy_mapper import OccupancyMapper
         self.occupancy_mapper = OccupancyMapper(
             resolution=self.occupancy_mapper.resolution,
             map_size=self.occupancy_mapper.map_size,

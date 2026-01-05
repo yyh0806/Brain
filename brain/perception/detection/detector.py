@@ -24,6 +24,38 @@ from brain.perception.core.types import (
 from brain.perception.core.enums import ObjectType, DetectionMode
 
 
+# ==================== 内部数据类 ====================
+
+@dataclass
+class Detection:
+    """检测结果"""
+    object_type: ObjectType
+    confidence: float
+    bounding_box_2d: Tuple[int, int, int, int]  # x, y, w, h
+    position_3d: Optional[Position3D] = None
+    attributes: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TrackedObject:
+    """跟踪的物体"""
+    track_id: str
+    object_type: ObjectType
+    position: Position3D
+    velocity: Velocity
+    history: List[Position3D] = field(default_factory=list)
+    lost_frames: int = 0
+    age: int = 0
+
+    def predict_position(self, dt: float = 1.0) -> Position3D:
+        """预测未来位置"""
+        return Position3D(
+            x=self.position.x + self.velocity.linear_x * dt,
+            y=self.position.y + self.velocity.linear_y * dt,
+            z=self.position.z + self.velocity.linear_z * dt
+        )
+
+
 class ObjectDetector:
     """
     目标检测器
@@ -273,35 +305,3 @@ class ObjectDetector:
             )
             for track in tracks
         ]
-
-
-# ==================== 内部数据类 ====================
-
-@dataclass
-class Detection:
-    """检测结果"""
-    object_type: ObjectType
-    confidence: float
-    bounding_box_2d: Tuple[int, int, int, int]  # x, y, w, h
-    position_3d: Optional[Position3D] = None
-    attributes: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class TrackedObject:
-    """跟踪的物体"""
-    track_id: str
-    object_type: ObjectType
-    position: Position3D
-    velocity: Velocity
-    history: List[Position3D] = field(default_factory=list)
-    lost_frames: int = 0
-    age: int = 0
-
-    def predict_position(self, dt: float = 1.0) -> Position3D:
-        """预测未来位置"""
-        return Position3D(
-            x=self.position.x + self.velocity.linear_x * dt,
-            y=self.position.y + self.velocity.linear_y * dt,
-            z=self.position.z + self.velocity.linear_z * dt
-        )

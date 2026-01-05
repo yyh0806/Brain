@@ -158,12 +158,14 @@ class TestTrackingLogic:
     @pytest.mark.asyncio
     async def test_track_removal(self):
         """测试跟踪移除"""
+        from brain.perception.detection.detector import TrackedObject
+
         detector = ObjectDetector()
 
-        # 创建一些跟踪
+        # 创建一些跟踪（使用真实的TrackedObject）
         for i in range(5):
             track_id = f"track_{i}"
-            detector.tracks[track_id] = Mock(
+            detector.tracks[track_id] = TrackedObject(
                 track_id=track_id,
                 lost_frames=0,
                 object_type=ObjectType.PERSON,
