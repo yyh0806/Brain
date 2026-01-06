@@ -21,7 +21,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import queue
 
-from .sensor_interface import BaseSensor, SensorConfig, create_sensor
+from .base import BaseSensor, SensorConfig, create_sensor
 from brain.perception.sensor_input_types import (
     SensorDataPacket,
     SensorType,

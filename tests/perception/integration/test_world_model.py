@@ -9,7 +9,7 @@ import numpy as np
 from unittest.mock import Mock
 from dataclasses import dataclass
 
-from brain.perception.world.model import WorldModel
+from brain.cognitive.world_model.world_model import WorldModel
 from brain.perception.core.types import (
     Pose2D,
     DetectedObject,

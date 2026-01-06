@@ -39,7 +39,7 @@ from geometry_msgs.msg import Point, Quaternion
 # from sensor_msgs import point_cloud2  # Not available in ROS2 Galactic, manual parsing used
 
 # Perception layer imports
-from brain.perception.vlm.vlm_perception import VLMPerception
+from brain.perception.understanding.vlm_perception import VLMPerception
 from brain.perception.data_models import Pose3D, Position3D, Velocity
 
 

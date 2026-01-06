@@ -21,7 +21,7 @@ from loguru import logger
 from brain.planning.orchestrator import PlanningOrchestrator
 from brain.execution.executor import Executor
 from brain.core.monitor import SystemMonitor
-from brain.perception.sensors.sensor_manager import MultiSensorManager as SensorManager
+from brain.perception.sensors.manager import MultiSensorManager as SensorManager
 from brain.perception.sensors.ros2_sensor_manager import ROS2SensorManager
 from brain.communication.ros2_interface import ROS2Interface, ROS2Config
 # EnvironmentModel 已删除，功能合并到 WorldModel

@@ -100,7 +100,7 @@ async def vlm_perception():
     with patch('brain.perception.vlm.vlm_perception.OLLAMA_AVAILABLE', False):
         with patch('brain.perception.vlm.vlm_perception.PIL_AVAILABLE', True):
             with patch('brain.perception.vlm.vlm_perception.ollama.Client', MockOllamaClient):
-                from brain.perception.vlm.vlm_perception import VLMPerception
+                from brain.perception.understanding.vlm_perception import VLMPerception
                 
                 # 创建VLM感知器
                 vlm = VLMPerception(
@@ -120,7 +120,7 @@ async def vlm_perception_with_yolo():
     with patch('brain.perception.vlm.vlm_perception.OLLAMA_AVAILABLE', False):
         with patch('brain.perception.vlm.vlm_perception.PIL_AVAILABLE', True):
             with patch('brain.perception.vlm.vlm_perception.ollama.Client', MockOllamaClient):
-                from brain.perception.vlm.vlm_perception import VLMPerception
+                from brain.perception.understanding.vlm_perception import VLMPerception
                 
                 # 创建VLM感知器
                 vlm = VLMPerception(
@@ -350,7 +350,7 @@ class TestVLMPerceptionWithYOLO:
     @pytest.mark.asyncio
     async def test_fuse_detections(self, vlm_perception_with_yolo, rgb_image):
         """测试检测融合"""
-        from brain.perception.vlm.vlm_perception import SceneDescription, DetectedObject, DetectionSource
+        from brain.perception.understanding.vlm_perception import SceneDescription, DetectedObject, DetectionSource
         
         # 创建VLM场景描述
         vlm_scene = SceneDescription(
@@ -397,7 +397,7 @@ class TestVLMPerceptionWithYOLO:
     @pytest.mark.asyncio
     async def test_is_same_object(self, vlm_perception_with_yolo, rgb_image):
         """测试对象匹配判断"""
-        from brain.perception.vlm.vlm_perception import DetectedObject, DetectionSource, BoundingBox
+        from brain.perception.understanding.vlm_perception import DetectedObject, DetectionSource, BoundingBox
         
         # 创建相同对象
         obj1 = DetectedObject(
@@ -436,7 +436,7 @@ class TestVLMPerceptionWithYOLO:
     @pytest.mark.asyncio
     async def test_compute_iou(self, vlm_perception_with_yolo, rgb_image):
         """测试IoU计算"""
-        from brain.perception.vlm.vlm_perception import BoundingBox
+        from brain.perception.understanding.vlm_perception import BoundingBox
         
         # 创建完全重叠的边界框
         box1 = BoundingBox(x=0.5, y=0.5, width=0.2, height=0.2)
@@ -462,7 +462,7 @@ class TestVLMDataStructures:
     
     def test_bounding_box(self):
         """测试边界框"""
-        from brain.perception.vlm.vlm_perception import BoundingBox
+        from brain.perception.understanding.vlm_perception import BoundingBox
         
         # 创建边界框
         bbox = BoundingBox(
@@ -501,7 +501,7 @@ class TestVLMDataStructures:
     
     def test_detected_object(self):
         """测试检测到的对象"""
-        from brain.perception.vlm.vlm_perception import DetectedObject, DetectionSource
+        from brain.perception.understanding.vlm_perception import DetectedObject, DetectionSource
         
         # 创建检测对象
         obj = DetectedObject(
@@ -545,7 +545,7 @@ class TestVLMDataStructures:
     
     def test_scene_description(self):
         """测试场景描述"""
-        from brain.perception.vlm.vlm_perception import SceneDescription, DetectedObject
+        from brain.perception.understanding.vlm_perception import SceneDescription, DetectedObject
         
         # 创建场景描述
         objects = [
@@ -598,7 +598,7 @@ class TestVLMDataStructures:
     
     def test_target_search_result(self):
         """测试目标搜索结果"""
-        from brain.perception.vlm.vlm_perception import TargetSearchResult, DetectedObject
+        from brain.perception.understanding.vlm_perception import TargetSearchResult, DetectedObject
         
         # 创建检测对象
         obj = DetectedObject(

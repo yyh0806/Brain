@@ -7,10 +7,7 @@ Architecture:
     data/         - 数据模型和类型
     sensors/       - 传感器管理和ROS2集成
     detection/     - 目标检测和跟踪
-    understanding/  - VLM场景理解
-    fusion/        - 多传感器数据融合
-    processing/    - 数据预处理和处理
-    infrastructure/- 基础设施（事件总线、异步处理等）
+    understanding/ - VLM场景理解
     mapping/       - 地图构建（占据栅格、语义地图）
     utils/         - 工具函数（坐标转换、验证等）
 
@@ -20,7 +17,7 @@ ROS_DOMAIN_ID Support:
     - 默认值为 0
 
 Author: Brain Development Team
-Date: 2025-01-04
+Date: 2025-01-06
 """
 
 # ==============================================================================
@@ -33,20 +30,11 @@ from .data.models import Pose2D, Pose3D, Position3D, Velocity, BoundingBox, Dete
 # 传感器管理
 # ==============================================================================
 from .sensors.base import BaseSensor
-from .sensors.manager import MultiSensorManager, SensorManager
-from .sensors.ros2_manager import ROS2SensorManager
+from .sensors.manager import MultiSensorManager
+from .sensors.ros2_sensor_manager import ROS2SensorManager, PerceptionData
 
-# 传感器特定导入
-try:
-    from .sensors.camera import CameraSensor
-    from .sensors.lidar import LidarSensor
-    from .sensors.imu import IMUSensor
-    from .sensors.gps import GPSSensor
-except ImportError as e:
-    CameraSensor = None
-    LidarSensor = None
-    IMUSensor = None
-    GPSSensor = None
+# 传感器融合
+from .sensors.fusion import FusedPose, EKFPoseFusion, DepthRGBFusion, ObstacleDetector
 
 # 传感器模型
 from .sensors.models.camera_model import CameraModel
@@ -54,18 +42,13 @@ from .sensors.models.lidar_model import LidarModel
 from .sensors.models.imu_model import IMUModel
 from .sensors.models.gps_model import GPSModel
 
-from .sensors.fusion import SensorFusion
-
-# 向后兼容的别名
-create_sensor = BaseSensor.create
-
 # ==============================================================================
 # 目标检测
 # ==============================================================================
 try:
     from .detection.detector import ObjectDetector, DetectionMode
     from .detection.tracker import ObjectTracker, TrackedObject
-except ImportError as e:
+except ImportError:
     ObjectDetector = None
     DetectionMode = None
     ObjectTracker = None
@@ -77,55 +60,29 @@ except ImportError as e:
 try:
     from .understanding.vlm_perception import VLMPerception
     from .understanding.vlm_service import VLMService
-except ImportError as e:
+except ImportError:
     VLMPerception = None
     VLMService = None
 
 # ==============================================================================
 # 地图构建
 # ==============================================================================
-from .mapping.occupancy_mapper import OccupancyMapper, OccupancyGrid
-
-# ==============================================================================
-# 数据融合
-# ==============================================================================
-from .sensors.sensor_fusion import EKFPoseFusion
-from .sensors.sensor_fusion import DepthRGBFusion
-from .sensors.sensor_fusion import ObstacleDetector
-
-# 别名以避免命名冲突
-PoseFusion = EKFPoseFusion
-DepthRGBFusion = DepthRGBFusion
-
-# ==============================================================================
-# 数据处理
-# ==============================================================================
 try:
-    from .processing.pointcloud_processor import LidarProcessor
-except ImportError as e:
-    LidarProcessor = None
-
-# ==============================================================================
-# 基础设施
-# ==============================================================================
-from .infrastructure.event_bus import PerceptionEventBus
-from .infrastructure.async_processor import AsyncProcessor
-from .infrastructure.circuit_breaker import CircuitBreaker
-from .infrastructure.performance_monitor import PerformanceMonitor
-from .infrastructure.converter import DataConverter
-from .infrastructure.exceptions import (
-    PerceptionError,
-    SensorError,
-    FusionError,
-    DetectionError,
-)
+    from .mapping.occupancy_mapper import OccupancyMapper, OccupancyGrid
+except ImportError:
+    OccupancyMapper = None
+    OccupancyGrid = None
 
 # ==============================================================================
 # 工具
 # ==============================================================================
 from .utils.coordinates import quaternion_to_euler, transform_local_to_world
-from .utils.math import compute_laser_angles, angle_to_direction
-from .utils.validation import validate_sensor_data, validate_pose
+from .utils.math_utils import compute_laser_angles, angle_to_direction
+try:
+    from .utils.validation import validate_sensor_data, validate_pose
+except ImportError:
+    validate_sensor_data = None
+    validate_pose = None
 
 # ==============================================================================
 # 统一导出接口
@@ -146,57 +103,40 @@ __all__ = [
     "SensorQuality",
     "ObjectType",
     "TerrainType",
-    
+
     # 传感器
     "BaseSensor",
-    "CameraSensor",
-    "LidarSensor",
-    "IMUSensor",
-    "GPSSensor",
     "MultiSensorManager",
-    "SensorManager",
     "ROS2SensorManager",
+    "PerceptionData",
     "create_sensor",
-    "SensorFusion",
+
+    # 融合
+    "FusedPose",
+    "EKFPoseFusion",
+    "DepthRGBFusion",
+    "ObstacleDetector",
+
+    # 传感器模型
     "CameraModel",
     "LidarModel",
     "IMUModel",
     "GPSModel",
-    
+
     # 目标检测
     "ObjectDetector",
     "DetectionMode",
     "ObjectTracker",
     "TrackedObject",
-    
+
     # 场景理解
     "VLMPerception",
     "VLMService",
-    
+
     # 地图
     "OccupancyMapper",
     "OccupancyGrid",
-    
-    # 融合
-    "EKFPoseFusion",
-    "PoseFusion",
-    "DepthRGBFusion",
-    "ObstacleDetector",
-    
-    # 处理
-    "LidarProcessor",
-    
-    # 基础设施
-    "PerceptionEventBus",
-    "AsyncProcessor",
-    "CircuitBreaker",
-    "PerformanceMonitor",
-    "DataConverter",
-    "PerceptionError",
-    "SensorError",
-    "FusionError",
-    "DetectionError",
-    
+
     # 工具
     "quaternion_to_euler",
     "transform_local_to_world",

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 sys.path.insert(0, '/media/yangyuhui/CODES1/Brain-Perception-Dev')
 
 from brain.perception.detection.detector import ObjectDetector
-from brain.perception.world.model import WorldModel
+from brain.cognitive.world_model.world_model import WorldModel
 from brain.perception.core.types import Pose2D, DetectedObject, Position3D
 from brain.perception.core.enums import ObjectType
 

@@ -23,10 +23,10 @@ from brain.communication.ros2_interface import ROS2Interface, SensorData, ROS2Co
 from brain.perception.mapping.occupancy_mapper import OccupancyMapper
 from brain.perception.utils.coordinates import quaternion_to_euler, transform_local_to_world
 from brain.perception.utils.math_utils import angle_to_direction, compute_laser_angles
-from brain.perception.data_models import Pose2D, Pose3D, Velocity
+from brain.perception.data.models import Pose2D, Pose3D, Velocity
 
 if TYPE_CHECKING:
-    from brain.perception.vlm.vlm_perception import DetectedObject, SceneDescription, VLMPerception
+    from brain.perception.understanding.vlm_perception import DetectedObject, SceneDescription, VLMPerception
 
 
 class SensorType(Enum):
@@ -219,7 +219,7 @@ class ROS2SensorManager:
         
         # 初始化VLMService（异步VLM分析服务）
         if vlm is not None and self._vlm_service is None:
-            from brain.perception.vlm_service import VLMService
+            from brain.perception.understanding.vlm_service import VLMService
             self._vlm_service = VLMService(
                 vlm=vlm,
                 max_workers=self.config.get("vlm", {}).get("max_workers", 1),
@@ -630,7 +630,7 @@ class ROS2SensorManager:
     async def start_vlm_service(self) -> None:
         """启动VLM异步服务"""
         if self.vlm_sync and not self._vlm_service:
-            from brain.perception.vlm_service import VLMService
+            from brain.perception.understanding.vlm_service import VLMService
             self._vlm_service = VLMService(
                 vlm=self.vlm_sync,
                 max_workers=self.config.get("vlm", {}).get("max_workers", 1),

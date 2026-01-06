@@ -41,7 +41,7 @@ except ImportError:
 
 # 导入 VLM 相关类型
 try:
-    from brain.perception.vlm.vlm_perception import (
+    from brain.perception.understanding.vlm_perception import (
         DetectedObject, SceneDescription, BoundingBox
     )
     VLM_AVAILABLE = True

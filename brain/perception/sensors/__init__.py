@@ -1,20 +1,16 @@
 """
 传感器管理层 - Sensors Layer
 
-提供传感器接口、管理器和融合算法。
+提供ROS2传感器管理器和数据融合。
 
 Author: Brain Development Team
-Date: 2025-01-04
+Date: 2025-01-06
 """
 
 from .base import BaseSensor
-from .camera import CameraSensor
-from .lidar import LidarSensor
-from .imu import IMUSensor
-from .gps import GPSSensor
+from .fusion import FusedPose, EKFPoseFusion, DepthRGBFusion, ObstacleDetector
 from .manager import MultiSensorManager
-from .ros2_manager import ROS2SensorManager
-from .fusion import SensorFusion
+from .ros2_sensor_manager import ROS2SensorManager, PerceptionData
 
 # 传感器模型
 from .models.camera_model import CameraModel
@@ -24,13 +20,13 @@ from .models.gps_model import GPSModel
 
 __all__ = [
     "BaseSensor",
-    "CameraSensor",
-    "LidarSensor",
-    "IMUSensor",
-    "GPSSensor",
+    "FusedPose",
+    "EKFPoseFusion",
+    "DepthRGBFusion",
+    "ObstacleDetector",
     "MultiSensorManager",
     "ROS2SensorManager",
-    "SensorFusion",
+    "PerceptionData",
     "CameraModel",
     "LidarModel",
     "IMUModel",
