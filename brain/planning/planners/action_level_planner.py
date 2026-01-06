@@ -8,9 +8,9 @@ Action-level规划器
 from typing import Dict, List, Any, Optional
 from loguru import logger
 
-from brain.planning.plan_state import PlanNode, NodeStatus
+from brain.planning.state import PlanNode, NodeStatus
 from brain.planning.capability import CapabilityRegistry, PlatformAdapter
-from .world_model_mock import WorldModelMock
+from brain.planning.action_level import WorldModelMock
 
 
 class ActionLevelPlanner:
@@ -42,6 +42,7 @@ class ActionLevelPlanner:
             platform: 平台类型（drone, ugv, usv）
         """
         self.registry = capability_registry
+        self.capability_registry = capability_registry  # 别名，兼容测试
         self.platform_adapter = platform_adapter
         self.world_model = world_model
         self.platform = platform

@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from loguru import logger
 
-from brain.planning.plan_state import PlanNode
+from brain.planning.state import PlanNode
 
 
 @dataclass

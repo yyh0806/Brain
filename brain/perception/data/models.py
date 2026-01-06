@@ -3,7 +3,7 @@
 统一的数据模型 - Unified Data Models
 """
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
 import math
 

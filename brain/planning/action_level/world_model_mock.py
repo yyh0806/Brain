@@ -6,19 +6,13 @@ Phase 0: 简单实现，返回固定值
 """
 
 from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
 from loguru import logger
 
-
-@dataclass
-class Location:
-    """位置信息"""
-    name: str
-    position: Dict[str, float]  # x, y, z
-    type: str = "room"  # room, door, object
+from brain.planning.interfaces import IWorldModel
+from brain.planning.models import Location
 
 
-class WorldModelMock:
+class WorldModelMock(IWorldModel):
     """
     世界模型模拟
     
@@ -150,7 +144,7 @@ class WorldModelMock:
     def is_at_location(self, location_name: str, tolerance: float = 1.0) -> bool:
         """
         检查机器人是否在指定位置
-        
+
         Args:
             location_name: 位置名称
             tolerance: 容差（米）
@@ -158,14 +152,32 @@ class WorldModelMock:
         location = self.get_location(location_name)
         if not location:
             return False
-        
+
         loc_pos = location.position
         robot_pos = self.robot_position
-        
+
         # 计算距离
         dx = robot_pos.get("x", 0) - loc_pos.get("x", 0)
         dy = robot_pos.get("y", 0) - loc_pos.get("y", 0)
         dz = robot_pos.get("z", 0) - loc_pos.get("z", 0)
         distance = (dx**2 + dy**2 + dz**2) ** 0.5
-        
+
         return distance <= tolerance
+
+    def get_available_locations(self) -> List[str]:
+        """
+        获取所有可用位置列表
+
+        Returns:
+            位置名称列表
+        """
+        return list(self.locations.keys())
+
+    def get_available_objects(self) -> List[str]:
+        """
+        获取所有已知物体列表
+
+        Returns:
+            物体名称列表
+        """
+        return list(self.object_locations.keys())

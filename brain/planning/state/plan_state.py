@@ -36,11 +36,26 @@ class PlanState:
         self.roots.append(root)
         self._index_node(root)
     
-    def _index_node(self, node: PlanNode):
-        """索引节点及其所有后代"""
+    def _index_node(self, node: PlanNode, visited: Optional[set] = None):
+        """索引节点及其所有后代
+
+        Args:
+            node: 要索引的节点
+            visited: 已访问的节点ID集合（用于检测循环）
+        """
+        if visited is None:
+            visited = set()
+
+        # 检测循环引用
+        if node.id in visited:
+            logger.warning(f"检测到循环引用: 节点 {node.id}")
+            return
+
+        visited.add(node.id)
         self.nodes[node.id] = node
+
         for child in node.children:
-            self._index_node(child)
+            self._index_node(child, visited)
     
     def get_node(self, node_id: str) -> Optional[PlanNode]:
         """获取节点"""
@@ -118,46 +133,75 @@ class PlanState:
         executing = len(self.get_executing_nodes())
         successful = len(self.get_successful_nodes())
         failed = len(self.get_failed_nodes())
-        
+
+        # 计算成功率（只计算已完成的节点）
+        completed = successful + failed
+        success_rate = successful / completed if completed > 0 else 0.0
+
         return {
-            "total_nodes": total,
+            "total": total,  # 主键
+            "total_nodes": total,  # 别名，兼容性
             "pending": pending,
             "ready": ready,
             "executing": executing,
             "successful": successful,
+            "success": successful,  # 别名，兼容性
             "failed": failed,
-            "success_rate": successful / total if total > 0 else 0.0
+            "success_rate": success_rate
         }
     
-    def can_safely_rollback(self, node_id: str) -> bool:
+    def can_safely_rollback(self, node_id: str = None) -> bool:
         """
         检查是否可以安全回滚节点
-        
+
+        Args:
+            node_id: 节点ID（可选，如果不提供则检查所有失败节点）
+
         Phase 1: 基础实现
         Phase 2: 检查commit_level
         """
+        # 如果没有提供node_id，检查是否有任何SOFT级别的失败节点可以回滚
+        if node_id is None:
+            from .plan_node import CommitLevel
+            for node in self.nodes.values():
+                if (node.status == NodeStatus.FAILED and
+                    node.commit_level == CommitLevel.SOFT):
+                    return True
+            return False
+
         node = self.get_node(node_id)
         if not node:
             return False
-        
+
         # Phase 1: 简单实现，所有节点都可以回滚
         # Phase 2: 检查commit_level == SOFT
         return True
     
-    def get_nodes_to_rollback(self, failed_node_id: str) -> List[PlanNode]:
+    def get_nodes_to_rollback(self, failed_node_id: str = None) -> List[PlanNode]:
         """
         获取需要回滚的节点列表
-        
+
+        Args:
+            failed_node_id: 失败节点ID（可选，如果不提供则返回所有EXECUTING和FAILED节点）
+
         从失败节点开始，向上查找所有需要回滚的节点
         """
+        # 如果没有提供failed_node_id，返回所有EXECUTING和FAILED节点
+        if failed_node_id is None:
+            from .plan_node import NodeStatus
+            return [
+                node for node in self.nodes.values()
+                if node.status in [NodeStatus.EXECUTING, NodeStatus.FAILED]
+            ]
+
         failed_node = self.get_node(failed_node_id)
         if not failed_node:
             return []
-        
+
         # Phase 1: 返回失败节点及其所有后代
         rollback_nodes = [failed_node]
         rollback_nodes.extend(failed_node.get_all_descendants())
-        
+
         return rollback_nodes
     
     def get_nodes_for_replanning(self, failed_node_id: str) -> List[PlanNode]:
@@ -182,18 +226,37 @@ class PlanState:
         return nodes
     
     def clone(self) -> 'PlanState':
-        """克隆PlanState（用于重规划）"""
-        # Phase 0: 简单实现
-        # Phase 2: 实现深度克隆，保留已完成节点
+        """克隆PlanState（用于重规划）
+
+        创建PlanState的深拷贝，保留所有节点和状态
+        """
+        import copy
+
+        # 深拷贝所有节点
         cloned = PlanState()
-        # TODO: 实现深度克隆逻辑
+        cloned.metadata = self.metadata.copy()
+        cloned.execution_history = self.execution_history.copy()
+
+        # 克隆根节点及其所有后代
+        for root in self.roots:
+            cloned_root = copy.deepcopy(root)
+            cloned.add_root(cloned_root)
+
         return cloned
-    
+
     def to_dict(self) -> Dict:
         """转换为字典"""
+        stats = self.get_execution_statistics()
         return {
             "roots": [root.to_dict() for root in self.roots],
-            "total_nodes": len(self.nodes),
-            "statistics": self.get_execution_statistics(),
+            "nodes": {node_id: node.to_dict() for node_id, node in self.nodes.items()},
+            "total": stats["total"],
+            "total_nodes": stats["total_nodes"],
+            "pending": stats["pending"],
+            "ready": stats["ready"],
+            "executing": stats["executing"],
+            "successful": stats["successful"],
+            "failed": stats["failed"],
+            "success_rate": stats["success_rate"],
             "metadata": self.metadata
         }

@@ -18,7 +18,7 @@ from datetime import datetime
 import uuid
 from loguru import logger
 
-from brain.planning.task.task_planner import TaskPlanner
+from brain.planning.orchestrator import PlanningOrchestrator
 from brain.execution.executor import Executor
 from brain.core.monitor import SystemMonitor
 from brain.perception.sensors.sensor_manager import MultiSensorManager as SensorManager
@@ -179,8 +179,8 @@ class Brain:
         )
         
         # 规划与执行
-        self.planner = TaskPlanner(
-            world_state=self.world_state,
+        self.planner = PlanningOrchestrator(
+            platform=self.config.get("platform", "ugv"),
             config=self.config.get("planning", {})
         )
         self.executor = Executor(

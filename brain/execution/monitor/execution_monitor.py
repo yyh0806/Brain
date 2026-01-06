@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from loguru import logger
 
-from brain.planning.plan_state import PlanNode, NodeStatus
+from brain.planning.state import PlanNode, NodeStatus
 from brain.execution.operations.base import OperationResult, OperationStatus
 from .failure_classifier import FailureClassifier, FailureType
 

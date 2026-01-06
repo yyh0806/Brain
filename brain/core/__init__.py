@@ -3,12 +3,12 @@
 
 这个模块提供了Brain系统的核心组件，包括：
 - Brain: 主要的大脑系统
-- TaskPlanner: 任务规划器
+- PlanningOrchestrator: 规划编排器
 - Executor: 执行器
 - SystemMonitor: 系统监控器
 
 导入示例:
-    from brain.core import Brain, TaskPlanner, Executor, SystemMonitor
+    from brain.core import Brain, PlanningOrchestrator, Executor, SystemMonitor
     from brain.core.brain import Brain  # 直接导入
 """
 
@@ -19,14 +19,14 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from brain.core.brain import Brain
-    from brain.planning.task.task_planner import TaskPlanner
+    from brain.planning.orchestrator import PlanningOrchestrator
     from brain.execution.executor import Executor
     from brain.core.monitor import SystemMonitor
 
 # 定义__all__以明确导出的内容
 __all__ = [
     "Brain",
-    "TaskPlanner",
+    "PlanningOrchestrator",
     "Executor",
     "SystemMonitor",
     "get_core_components"
@@ -45,8 +45,8 @@ def __getattr__(name: str):
     """延迟导入属性，避免循环依赖"""
     if name == "Brain":
         return _import_core_module("brain.core.brain", "Brain")
-    elif name == "TaskPlanner":
-        return _import_core_module("brain.planning.task.task_planner", "TaskPlanner")
+    elif name == "PlanningOrchestrator":
+        return _import_core_module("brain.planning.orchestrator", "PlanningOrchestrator")
     elif name == "Executor":
         return _import_core_module("brain.execution.executor", "Executor")
     elif name == "SystemMonitor":
@@ -62,7 +62,7 @@ def get_core_components():
     """
     return {
         "Brain": __getattr__("Brain"),
-        "TaskPlanner": __getattr__("TaskPlanner"),
+        "PlanningOrchestrator": __getattr__("PlanningOrchestrator"),
         "Executor": __getattr__("Executor"),
         "SystemMonitor": __getattr__("SystemMonitor")
     }
