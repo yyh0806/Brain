@@ -24,8 +24,8 @@ from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, Any, List
 import numpy as np
 
-# Add Brain-Perception-Dev to path
-sys.path.insert(0, '/media/yangyuhui/CODES1/Brain-Perception-Dev')
+# Add Brain to path
+sys.path.insert(0, '/media/yangyuhui/CODES1/Brain')
 
 import rclpy
 from rclpy.node import Node
@@ -40,7 +40,7 @@ from geometry_msgs.msg import Point, Quaternion
 
 # Perception layer imports
 from brain.perception.understanding.vlm_perception import VLMPerception
-from brain.perception.data_models import Pose3D, Position3D, Velocity
+from brain.perception.data.models import Pose3D, Position3D, Velocity
 
 
 @dataclass
@@ -459,8 +459,8 @@ def main(args=None):
     finally:
         # Generate filenames with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        json_file = f"/media/yangyuhui/CODES1/Brain-Perception-Dev/tests/perception/e2e/perception_data_10s_{timestamp}.json"
-        md_file = f"/media/yangyuhui/CODES1/Brain-Perception-Dev/tests/perception/e2e/perception_data_10s_{timestamp}.md"
+        json_file = f"/media/yangyuhui/CODES1/Brain/tests/perception/e2e/perception_data_10s_{timestamp}.json"
+        md_file = f"/media/yangyuhui/CODES1/Brain/tests/perception/e2e/perception_data_10s_{timestamp}.md"
 
         # Save data
         recorder.save_to_json(json_file)
