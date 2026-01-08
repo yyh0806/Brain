@@ -36,19 +36,51 @@ from sensor_msgs.msg import PointCloud2
 from sensor_msgs.msg import Imu as SensorImu
 from nav_msgs.msg import Odometry
 
-# Try to import cv_bridge, but make it optional
-try:
-    from cv_bridge import CvBridge
-    CV_BRIDGE_AVAILABLE = True
-except ImportError:
-    CV_BRIDGE_AVAILABLE = False
-    print("⚠️  cv_bridge not available, VLM analysis will be limited")
-
 # Perception layer imports
 from brain.perception.sensors.ros2_sensor_manager import PerceptionData
 from brain.perception.understanding.vlm_perception import VLMPerception
 from brain.perception.data.models import Pose3D, Velocity
 from brain.perception.utils.math_utils import compute_laser_angles
+
+
+def ros_image_to_numpy(img_msg: SensorImage) -> np.ndarray:
+    """
+    Convert ROS2 Image message to numpy array.
+    Simple replacement for cv_bridge using only numpy.
+
+    Supports: rgb8, bgr8, mono8
+    """
+    # Determine dtype from encoding
+    if img_msg.encoding in ['rgb8', 'bgr8', 'mono8']:
+        dtype = np.uint8
+    elif img_msg.encoding == 'mono16':
+        dtype = np.uint16
+    else:
+        raise ValueError(f"Unsupported encoding: {img_msg.encoding}")
+
+    # Convert from buffer to numpy array
+    arr = np.frombuffer(img_msg.data, dtype=dtype)
+
+    # Determine number of channels
+    if img_msg.encoding in ['rgb8', 'bgr8']:
+        n_channels = 3
+    elif img_msg.encoding in ['mono8', 'mono16']:
+        n_channels = 1
+    else:
+        # Try to infer from image dimensions
+        n_channels = arr.size // (img_msg.height * img_msg.width)
+
+    # Reshape to image dimensions
+    if n_channels == 1:
+        arr = arr.reshape((img_msg.height, img_msg.width))
+    else:
+        arr = arr.reshape((img_msg.height, img_msg.width, n_channels))
+
+    # Convert BGR to RGB if needed
+    if img_msg.encoding == 'bgr8':
+        arr = arr[:, :, ::-1].copy()  # BGR -> RGB
+
+    return arr
 
 
 class PerceptionDataDisplay(Node):
@@ -72,12 +104,9 @@ class PerceptionDataDisplay(Node):
         # Sensor data buffers
         self.current_odometry = None
         self.current_rgb_image_msg = None  # Store ROS2 message
-        self.current_rgb_image_cv2 = None  # Store OpenCV image for VLM
+        self.current_rgb_image_np = None  # Store numpy array for VLM
         self.current_pointcloud = None
         self.current_imu = None
-
-        # CV Bridge for image conversion (if available)
-        self.cv_bridge = CvBridge() if CV_BRIDGE_AVAILABLE else None
 
         # ROS2 subscribers
         self._setup_subscribers()
@@ -138,19 +167,13 @@ class PerceptionDataDisplay(Node):
         try:
             self.current_rgb_image_msg = msg
 
-            # Convert to OpenCV format for VLM if cv_bridge is available
-            if self.cv_bridge is not None:
-                self.current_rgb_image_cv2 = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='rgb8')
-            else:
-                # Manual conversion using numpy (works for rgb8 encoding)
-                if msg.encoding == 'rgb8':
-                    # Create numpy array from image data
-                    img = np.frombuffer(msg.data, dtype=np.uint8)
-                    # Reshape to (height, width, 3)
-                    img = img.reshape(msg.height, msg.width, 3)
-                    self.current_rgb_image_cv2 = img
-                else:
-                    self.current_rgb_image_cv2 = None
+            # Convert ROS2 Image to numpy array using our custom function
+            self.current_rgb_image_np = ros_image_to_numpy(msg)
+
+            # Ensure we have RGB format (3 channels)
+            if len(self.current_rgb_image_np.shape) == 2:
+                # Grayscale to RGB
+                self.current_rgb_image_np = np.stack([self.current_rgb_image_np] * 3, axis=-1)
 
             self._try_capture_frame()
         except Exception as e:
@@ -172,7 +195,7 @@ class PerceptionDataDisplay(Node):
             return
 
         # Wait for at least odometry and RGB image
-        if self.current_odometry is None or self.current_rgb_image_cv2 is None:
+        if self.current_odometry is None or self.current_rgb_image_np is None:
             return
 
         self.frames_captured += 1
@@ -190,7 +213,7 @@ class PerceptionDataDisplay(Node):
         # Clear buffers for next frame
         self.current_odometry = None
         self.current_rgb_image_msg = None
-        self.current_rgb_image_cv2 = None
+        self.current_rgb_image_np = None
         self.current_pointcloud = None
         self.current_imu = None
 
@@ -232,8 +255,8 @@ class PerceptionDataDisplay(Node):
                 angular_z=twist.angular.z
             )
 
-        # RGB image
-        rgb_image = self.current_rgb_image_cv2
+        # RGB image (already converted to numpy array by ros2_numpy)
+        rgb_image = self.current_rgb_image_np
 
         # Pointcloud (extract basic info)
         pointcloud = None
@@ -301,7 +324,7 @@ class PerceptionDataDisplay(Node):
         # Sensor status
         perception.sensor_status = {
             'odometry': self.current_odometry is not None,
-            'rgb_camera': self.current_rgb_image_cv2 is not None,
+            'rgb_camera': self.current_rgb_image_np is not None,
             'pointcloud': self.current_pointcloud is not None,
             'imu': self.current_imu is not None,
             'vlm': self.vlm is not None
