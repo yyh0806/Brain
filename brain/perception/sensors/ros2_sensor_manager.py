@@ -207,7 +207,7 @@ class ROS2SensorManager:
         # 初始化WorldModel（全局世界模型）
         # 注意：world_model应该使用同一个occupancy_mapper，以便共享占据地图数据
         if world_model is None:
-            from brain.perception.world_model import WorldModel
+            from brain.cognitive.world_model.world_model import WorldModel
             world_model = WorldModel(
                 resolution=grid_resolution,
                 map_size=map_size,
