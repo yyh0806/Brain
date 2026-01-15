@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from loguru import logger
 
 from brain.planning.state import PlanNode
-from brain.execution.monitor import FailureType
+from brain.planning.intelligent.failure_types import FailureType
 
 
 class ReplanningRules:

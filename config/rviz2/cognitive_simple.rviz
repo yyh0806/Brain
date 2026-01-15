@@ -1,0 +1,78 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Displays:
+    - Alpha: 0.7
+      Class: rviz_default_plugins/OccupancyGrid
+      Enabled: true
+      Name: Semantic Occupancy Grid
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/semantic_grid
+    - Class: rviz_default_plugins/Path
+      Color: 0; 255; 0
+      Enabled: true
+      Name: Robot Trajectory
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/trajectory
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Semantic Objects
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/semantic_markers
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Belief Markers
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/belief_markers
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Exploration Frontiers
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/frontiers
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: VLM Detections
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vlm/detections
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Change Events
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/change_events
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera

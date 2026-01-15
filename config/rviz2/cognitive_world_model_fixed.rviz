@@ -1,0 +1,83 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 480
+    Name: Displays
+    
+  - Class: rviz_common/Displays
+    Help Height: 480
+    Name: Displays
+    Displays:
+      # 1. 语义占据地图
+      - Class: nav_msgs/OccupancyGrid
+        Name: Semantic Occupancy Grid
+        Topic: /world_model/semantic_grid
+        Alpha: 0.7
+        Color Scheme: map
+      
+      # 2. 语义物体标注
+      - Class: visualization_msgs/MarkerArray
+        Name: Semantic Objects
+        Topic: /world_model/semantic_markers
+        Namespace: semantic_labels
+      
+      # 3. 信念状态标记
+      - Class: visualization_msgs/MarkerArray
+        Name: Belief Markers
+        Topic: /world_model/belief_markers
+      
+      # 4. 机器人轨迹
+      - Class: nav_msgs/Path
+        Name: Robot Trajectory
+        Topic: /world_model/trajectory
+        Color: 0; 200; 100
+        Line Width: 0.1
+      
+      # 5. 探索边界
+      - Class: visualization_msgs/MarkerArray
+        Name: Exploration Frontiers
+        Topic: /world_model/frontiers
+      
+      # 6. 变化事件
+      - Class: visualization_msgs/MarkerArray
+        Name: Change Events
+        Topic: /world_model/change_events
+      
+      # 7. VLM检测
+      - Class: visualization_msgs/MarkerArray
+        Name: VLM Detections
+        Topic: /vlm/detections
+      
+      # 8. RGB相机图像
+      - Class: sensor_msgs/Image
+        Name: RGB Camera
+        Topic: /front_stereo_camera/left/image_raw
+        Image Rendering: bilinear
+        Transport Hint: raw
+        Queue Size: 10
+        Min Value: 0
+        Max Value: 255
+      
+      # 9. 3D点云
+      - Class: sensor_msgs/PointCloud2
+        Name: 3D Point Cloud
+        Topic: /front_3d_lidar/lidar_points
+        Size (m): 0.05
+        Color Transformer: AxisColor
+        Auto Size: false
+        Decay Time: 0.0
+
+Visualization Manager:
+  Class: rviz/VisualizationManager
+  Name: Visualization Manager
+
+Preferences:
+  Class: rviz_common/Preferences
+  Name: Preferences
+
+Tool Properties:
+  Class: rviz/Tool Properties
+  Name: Tool Properties
+  - Property tree style: 1
+  - Property tree show all: 1
+  - Show help: 1
+

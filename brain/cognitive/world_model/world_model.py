@@ -30,6 +30,11 @@ from brain.cognitive.world_model.semantic.semantic_object import (
     SemanticObject,
     ExplorationFrontier
 )
+from brain.cognitive.world_model.causal_graph import (
+    CausalGraph,
+    CausalNode,
+    CausalRelationType
+)
 
 # 导入资源管理器
 try:
@@ -177,6 +182,11 @@ class WorldModel:
         self._object_counter = 0
         self.max_semantic_objects = self.config.get("max_semantic_objects", 500)
 
+        # NEW: 因果图（三模态融合 - 因果地图模态）
+        self.causal_graph = CausalGraph()
+        self.state_history: List[Dict[str, Any]] = []
+        self.last_state: Dict[str, Any] = {}
+
         # 探索边界管理（从 SemanticWorldModel 迁移）- 优化内存使用
         self.exploration_frontiers: List[ExplorationFrontier] = []
         self._frontier_counter = 0
@@ -286,6 +296,19 @@ class WorldModel:
                         "velocity": perception_data.velocity.to_dict() if perception_data.velocity else {}
                     })
 
+        # NEW: 保存当前状态用于因果检测
+        current_state = {
+            "timestamp": datetime.now(),
+            "robot_position": self.robot_position.copy(),
+            "objects": {
+                obj_id: {
+                    "position": obj.position.copy() if hasattr(obj, 'position') else {},
+                    "state": obj.state if hasattr(obj, 'state') else None
+                }
+                for obj_id, obj in self.tracked_objects.items()
+            }
+        }
+
         # 地图更新（检查是否有变化）
         if perception_data.occupancy_grid is not None:
             if self.current_map is None or not np.array_equal(self.current_map, perception_data.occupancy_grid):
@@ -315,6 +338,21 @@ class WorldModel:
             self.change_history = self.change_history[-self.max_history:]
 
         self.last_update = datetime.now()
+
+        # NEW: 检测因果关系（三模态融合 - 因果地图模态）
+        if hasattr(self, 'last_state') and self.last_state:
+            self._detect_and_update_causal_relations(
+                self.last_state,
+                current_state
+            )
+
+        # 保存当前状态作为下次的上一次状态
+        self.last_state = current_state
+        self.state_history.append(current_state)
+
+        # 限制状态历史长度
+        if len(self.state_history) > 100:
+            self.state_history = self.state_history[-100:]
 
         if changes:
             logger.info(f"WorldModel增量更新: 检测到 {len(changes)} 个变化")
@@ -790,7 +828,45 @@ class WorldModel:
         recent_changes = [
             c.to_dict() for c in self.change_history[-5:]
         ]
-        
+
+        # NEW: 收集语义物体（三模态融合 - 语义地图）
+        semantic_objects_list = []
+        for obj_id, obj in self.semantic_objects.items():
+            if obj.is_valid() and obj.state != ObjectState.LOST:
+                semantic_objects_list.append({
+                    "id": obj_id,
+                    "label": obj.label,
+                    "position": obj.world_position,
+                    "confidence": obj.confidence,
+                    "state": obj.state.value,
+                    "attributes": obj.attributes
+                })
+
+        # NEW: 收集因果图数据（三模态融合 - 因果地图）
+        causal_graph_data = {}
+        if hasattr(self, 'causal_graph'):
+            # 收集因果关系摘要
+            relations = []
+            for (cause, effect), edge in self.causal_graph.edges.items():
+                if edge.confidence > 0.6:
+                    cause_node = self.causal_graph.nodes.get(cause)
+                    effect_node = self.causal_graph.nodes.get(effect)
+                    cause_label = cause_node.label if cause_node else cause
+                    effect_label = effect_node.label if effect_node else effect
+                    relations.append(f"{cause_label} → {effect_label}")
+
+            causal_graph_data = {
+                "relations": relations,
+                "num_edges": len(self.causal_graph.edges),
+                "num_nodes": len(self.causal_graph.nodes)
+            }
+
+        # NEW: 收集状态预测
+        state_predictions = []
+        if hasattr(self, 'causal_graph') and hasattr(self, 'predict_future_state'):
+            prediction_result = self.predict_future_state(horizon=5.0)
+            state_predictions = prediction_result.get("predictions", [])
+
         return PlanningContext(
             current_position=self.robot_position,
             current_heading=self.robot_heading,
@@ -803,7 +879,11 @@ class WorldModel:
             available_paths=self.known_paths,
             constraints=constraints,
             recent_changes=recent_changes,
-            risk_areas=[]  # TODO: 实现风险区域计算
+            risk_areas=[],  # TODO: 实现风险区域计算
+            # NEW: 三模态融合字段
+            semantic_objects=semantic_objects_list,
+            causal_graph=causal_graph_data,
+            state_predictions=state_predictions
         )
     
     def _calculate_distance(self, position: Dict[str, float]) -> float:
@@ -899,7 +979,147 @@ class WorldModel:
             total += math.sqrt(dx**2 + dy**2)
         
         return total
-    
+
+    # ============ 三模态融合 - 因果地图方法 ============
+
+    def _detect_and_update_causal_relations(
+        self,
+        old_state: Dict[str, Any],
+        new_state: Dict[str, Any]
+    ):
+        """检测和更新因果关系（三模态融合 - 因果地图模态）
+
+        分析状态变化，检测可能的因果关系并更新因果图。
+
+        Args:
+            old_state: 上一次的状态
+            new_state: 当前状态
+        """
+        old_objects = old_state.get("objects", {})
+        new_objects = new_state.get("objects", {})
+
+        # 检测新物体出现
+        for obj_id in new_objects:
+            if obj_id not in old_objects:
+                # 新物体出现
+                self.causal_graph.add_or_update_node(
+                    node_id=obj_id,
+                    node_type="object",
+                    label=f"object_{obj_id}",
+                    state=new_objects[obj_id]
+                )
+                # 推测：机器人探索导致了发现
+                self.causal_graph.add_causal_relation(
+                    cause="robot",
+                    effect=obj_id,
+                    relation_type=CausalRelationType.FUNCTIONAL,
+                    confidence=0.6,
+                    metadata={"reason": "object_discovery"}
+                )
+
+        # 检测物体移动
+        for obj_id in new_objects:
+            if obj_id not in old_objects:
+                continue
+
+            old_pos = old_objects[obj_id].get("position", {})
+            new_pos = new_objects[obj_id].get("position", {})
+
+            # 计算移动距离
+            dx = new_pos.get("x", 0) - old_pos.get("x", 0)
+            dy = new_pos.get("y", 0) - old_pos.get("y", 0)
+            distance = math.sqrt(dx*dx + dy*dy)
+
+            if distance > 2.0:  # 显著移动
+                # 推测：机器人交互导致移动
+                self.causal_graph.add_causal_relation(
+                    cause="robot",
+                    effect=obj_id,
+                    relation_type=CausalRelationType.FUNCTIONAL,
+                    confidence=0.7,
+                    metadata={"reason": "object_movement", "distance": distance}
+                )
+
+        # 检测状态变化
+        for obj_id in new_objects:
+            if obj_id not in old_objects:
+                continue
+
+            old_obj_state = old_objects[obj_id].get("state")
+            new_obj_state = new_objects[obj_id].get("state")
+
+            if old_obj_state and new_obj_state and old_obj_state != new_obj_state:
+                # 状态发生变化
+                self.causal_graph.add_causal_relation(
+                    cause="robot",
+                    effect=obj_id,
+                    relation_type=CausalRelationType.STATE_CHANGE,
+                    confidence=0.6,
+                    metadata={
+                        "reason": "state_change",
+                        "old_state": str(old_obj_state),
+                        "new_state": str(new_obj_state)
+                    }
+                )
+
+    def predict_future_state(
+        self,
+        horizon: float = 5.0
+    ) -> Dict[str, Any]:
+        """预测未来状态（三模态融合 - 因果推理）
+
+        基于因果图预测可能的未来状态变化。
+
+        Args:
+            horizon: 预测时间范围（秒）
+
+        Returns:
+            预测结果 {"predictions": List[Dict]}
+        """
+        predictions = []
+
+        # 使用因果图预测
+        for node_id, node in self.causal_graph.nodes.items():
+            if not node.active:
+                continue
+
+            effects = self.causal_graph.predict_effects(node_id)
+
+            for effect_id, confidence in effects:
+                if confidence > 0.7:
+                    effect_node = self.causal_graph.nodes.get(effect_id)
+                    effect_label = effect_node.label if effect_node else effect_id
+
+                    predictions.append({
+                        "cause": node_id,
+                        "cause_label": node.label,
+                        "effect": effect_id,
+                        "effect_label": effect_label,
+                        "confidence": confidence,
+                        "expected_time": horizon,
+                        "description": f"{node.label} 可能导致 {effect_label} "
+                                      f"(置信度{confidence:.0%})"
+                    })
+
+        return {"predictions": predictions}
+
+    def get_causal_graph_statistics(self) -> Dict[str, Any]:
+        """获取因果图统计信息"""
+        return self.causal_graph.get_statistics()
+
+    def explain_object_state(self, obj_id: str) -> Optional[str]:
+        """解释物体当前状态的原因
+
+        Args:
+            obj_id: 物体ID
+
+        Returns:
+            原因描述字符串
+        """
+        return self.causal_graph.explain_state_change(obj_id)
+
+    # ============ 原有方法 ============
+
     def get_summary(self) -> Dict[str, Any]:
         """获取世界模型摘要"""
         return {

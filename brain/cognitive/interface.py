@@ -165,7 +165,8 @@ class CognitiveLayer:
         cot_engine: Optional['CoTEngine'] = None,
         dialogue_manager: Optional['DialogueManager'] = None,
         perception_monitor: Optional['PerceptionMonitor'] = None,
-        config: Optional[Dict[str, Any]] = None
+        config: Optional[Dict[str, Any]] = None,
+        enable_visualization: bool = True  # ✨ 新增：是否启用可视化
     ):
         """
         Args:
@@ -174,6 +175,7 @@ class CognitiveLayer:
             dialogue_manager: 对话管理器实例
             perception_monitor: 感知监控器实例
             config: 配置选项
+            enable_visualization: 是否启用可视化（✨ 新增）
         """
         self.config = config or {}
         self.world_model = world_model
@@ -184,7 +186,60 @@ class CognitiveLayer:
         # 感知管理器（将由Brain传入）
         self._sensor_manager = None
         
+        # ✨ 新增：可视化器
+        self.visualizer = None
+        if enable_visualization and world_model:
+            try:
+                import rclpy
+                rclpy.init(args=None)
+            except:
+                pass  # 已经初始化
+            
+            from brain.cognitive.world_model.world_model_visualizer import WorldModelVisualizer
+            
+            # 获取可视化配置
+            viz_config = self.config.get("visualization", {})
+            publish_rate = viz_config.get("publish_rate", 2.0)
+            
+            self.visualizer = WorldModelVisualizer(
+                world_model=world_model,
+                publish_rate=publish_rate
+            )
+            
+            # 在新线程中运行可视化节点
+            import threading
+            viz_thread = threading.Thread(target=self._run_visualizer)
+            viz_thread.daemon = True
+            viz_thread.start()
+            
+            logger.info("认知层RViz可视化已启动")
+        
         logger.info("CognitiveLayer 初始化完成")
+    
+    def _run_visualizer(self):
+        """在独立线程中运行可视化节点"""
+        import rclpy
+        try:
+            rclpy.spin(self.visualizer)
+        except KeyboardInterrupt:
+            logger.info("可视化器收到中断信号")
+        finally:
+            if rclpy.ok():
+                logger.info("关闭可视化器")
+                self.visualizer.destroy_node()
+    
+    def stop_visualization(self):
+        """停止可视化"""
+        if self.visualizer:
+            logger.info("停止认知层RViz可视化")
+            import rclpy
+            try:
+                self.visualizer.destroy_node()
+                rclpy.shutdown()
+            except:
+                pass
+            self.visualizer = None
+            logger.info("可视化器已停止")
     
     async def process_perception(
         self, 
@@ -420,6 +475,67 @@ class CognitiveLayer:
             raise ValueError("PerceptionMonitor 未初始化")
         
         logger.info("停止感知监控")
+
+    def start_visualization(self):
+        """启动认知层RViz可视化"""
+        viz_config = self.config.get("visualization", {})
+        
+        if not viz_config.get("enabled", True):
+            logger.info("可视化已禁用")
+            return
+        
+        if self.visualizer:
+            logger.warning("可视化器已经在运行")
+            return
+        
+        try:
+            import rclpy
+            rclpy.init(args=None)
+        except:
+            pass  # 已经初始化
+        
+        from brain.cognitive.world_model.world_model_visualizer import WorldModelVisualizer
+        
+        # 获取可视化配置
+        publish_rate = viz_config.get("publish_rate", 2.0)
+        
+        self.visualizer = WorldModelVisualizer(
+            world_model=self.world_model,
+            publish_rate=publish_rate
+        )
+        
+        # 在新线程中运行
+        import threading
+        viz_thread = threading.Thread(target=self._run_visualizer)
+        viz_thread.daemon = True
+        viz_thread.start()
+        
+        logger.info("认知层RViz可视化已启动")
+
+    def _run_visualizer(self):
+        """在独立线程中运行可视化节点"""
+        import rclpy
+        try:
+            rclpy.spin(self.visualizer)
+        except KeyboardInterrupt:
+            logger.info("可视化器收到中断信号")
+        finally:
+            if rclpy.ok():
+                logger.info("关闭可视化器")
+                self.visualizer.destroy_node()
+
+    def stop_visualization(self):
+        """停止认知层RViz可视化"""
+        if self.visualizer:
+            logger.info("停止认知层RViz可视化")
+            import rclpy
+            try:
+                self.visualizer.destroy_node()
+                rclpy.shutdown()
+            except:
+                pass
+            self.visualizer = None
+            logger.info("可视化器已停止")
 
 
 

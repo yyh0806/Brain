@@ -6,19 +6,25 @@ Phase 0: 简单实现，返回固定值
 """
 
 from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, field
 from loguru import logger
 
-from brain.planning.interfaces import IWorldModel
-from brain.planning.models import Location
+
+@dataclass
+class Location:
+    """位置信息"""
+    name: str
+    position: Dict[str, float]  # x, y, z
+    type: str = "room"  # room, door, object
 
 
-class WorldModelMock(IWorldModel):
+class WorldModelMock:
     """
     世界模型模拟
-    
+
     Phase 0: 返回固定值，用于测试
     """
-    
+
     def __init__(self):
         """初始化模拟世界模型"""
         # 预定义的位置
@@ -49,63 +55,63 @@ class WorldModelMock(IWorldModel):
                 type="door"
             )
         }
-        
+
         # 预定义的物体位置
         self.object_locations: Dict[str, str] = {
             "cup": "kitchen",  # 杯子在厨房
             "water": "kitchen"  # 水在厨房
         }
-        
+
         # 门状态
         self.door_states: Dict[str, str] = {
             "kitchen_door": "closed"  # 默认关闭
         }
-        
+
         # 机器人当前位置
         self.robot_position: Dict[str, float] = {"x": 0.0, "y": 0.0, "z": 0.0}
-        
+
         logger.info("WorldModelMock 初始化完成")
-    
+
     def get_location(self, location_name: str) -> Optional[Location]:
         """
         获取位置信息
-        
+
         Args:
             location_name: 位置名称（如"kitchen"）
-            
+
         Returns:
             Location对象，如果不存在则返回None
         """
         return self.locations.get(location_name)
-    
+
     def get_object_location(self, object_name: str) -> Optional[str]:
         """
         获取物体位置
-        
+
         Args:
             object_name: 物体名称（如"cup"）
-            
+
         Returns:
             位置名称，如果不存在则返回None
         """
         return self.object_locations.get(object_name)
-    
+
     def get_door_state(self, door_name: str) -> Optional[str]:
         """
         获取门状态
-        
+
         Args:
             door_name: 门名称（如"kitchen_door"）
-            
+
         Returns:
             门状态（"open"或"closed"），如果不存在则返回None
         """
         return self.door_states.get(door_name)
-    
+
     def set_door_state(self, door_name: str, state: str):
         """
         设置门状态
-        
+
         Args:
             door_name: 门名称
             state: 状态（"open"或"closed"）
@@ -113,34 +119,34 @@ class WorldModelMock(IWorldModel):
         if door_name in self.door_states:
             self.door_states[door_name] = state
             logger.info(f"门 {door_name} 状态更新为: {state}")
-    
+
     def get_robot_position(self) -> Dict[str, float]:
         """获取机器人当前位置"""
         return self.robot_position.copy()
-    
+
     def set_robot_position(self, position: Dict[str, float]):
         """设置机器人位置"""
         self.robot_position = position.copy()
         logger.debug(f"机器人位置更新: {position}")
-    
+
     def is_object_visible(self, object_name: str) -> bool:
         """
         检查物体是否可见
-        
+
         Phase 0: 简单实现，如果物体在已知位置则可见
         """
         location = self.get_object_location(object_name)
         if not location:
             return False
-        
+
         # 简单判断：如果物体位置已知，则认为可见
         return True
-    
+
     def is_door_open(self, door_name: str) -> bool:
         """检查门是否打开"""
         state = self.get_door_state(door_name)
         return state == "open"
-    
+
     def is_at_location(self, location_name: str, tolerance: float = 1.0) -> bool:
         """
         检查机器人是否在指定位置
@@ -165,19 +171,9 @@ class WorldModelMock(IWorldModel):
         return distance <= tolerance
 
     def get_available_locations(self) -> List[str]:
-        """
-        获取所有可用位置列表
-
-        Returns:
-            位置名称列表
-        """
+        """获取所有可用位置列表"""
         return list(self.locations.keys())
 
     def get_available_objects(self) -> List[str]:
-        """
-        获取所有已知物体列表
-
-        Returns:
-            物体名称列表
-        """
+        """获取所有已知物体列表"""
         return list(self.object_locations.keys())

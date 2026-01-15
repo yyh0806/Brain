@@ -1,0 +1,115 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Time
+    Name: Time
+Visualization Manager:
+  Global Options:
+    Fixed Frame: map
+    Frame Rate: 30
+  Displays:
+    # 1. 语义占据栅格
+    - Name: Semantic Occupancy Grid
+      Class: rviz_default_plugins/Map
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/semantic_grid
+      Color Scheme: map
+      Draw Behind: false
+      Alpha: 0.7
+      Update Threshold: 1
+      Resolution: 0.1
+
+    # 2. 语义物体标签
+    - Name: Semantic Labels
+      Class: rviz_default_plugins/MarkerArray
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/semantic_markers
+      Marker Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/semantic_markers
+
+    # 3. 机器人轨迹
+    - Name: Robot Trajectory
+      Class: rviz_default_plugins/Path
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/trajectory
+      Color: 0; 255; 0
+      Line Style: Lines
+      Line Width: 0.1
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+
+    # 4. 探索前沿
+    - Name: Exploration Frontiers
+      Class: rviz_default_plugins/MarkerArray
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/frontiers
+      Marker Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/frontiers
+
+    # 5. TF树
+    - Name: TF
+      Class: rviz_default_plugins/TF
+
+    # 6. Axes（显示地图原点）
+    - Name: Map Origin
+      Class: rviz_default_plugins/Axes
+      Reference Frame: map
+      Length: 10.0
+      Radius: 1.0
+
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 50.0
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0
+      Focal Shape Size: 0.05
+      Name: Current View
+      Pitch: 1.4
+      Target Frame: map
+      Yaw: 0.785398
+    Saved: ~
+  Window Geometry:
+    "":
+      collapsed: false
+    Height: 846
+    Hide Left Dock: false
+    Hide Right Dock: false
+    QMainWindow State: 000000ff00000000fd000000040000000000000193000002b7c0200000009fb0000001200530065006c00650069006e006100200000001000001bc0000005c00fffffffb0000001e0054006f007000650073006900620000005bc0000005c00fffffffb0000001e0054006f0070006500730000004d0002000000ffffffff000001bc0000005c00fffffffb0000001e0054006f00700065006c00690062000000100000fffffffffffffb000000200054006f00700069007200740020000ffff000200fb000000120057006f00700074006f006900620000001d0000021fb000000200057006f00700074006f007000010000000001d0000021fb000000200057006f00700074006f0069006200000021000021fb00000010004400690062000750066006e00640020000ffff000200fb0000001200530065006c00650069006e0061002000000021fb0000002000530065006c00650069006e006100200000021fb00000010004d00690062000760066006e00640020000ffff000200fb00000012006d006f00700074006f0069006200000031000021fb00000010004d00690062000770066006e00640020000ffff000200fb000000120064006f00700066006f006900620000003d0000021fb00000010004b00690062000750066006e00640020000ffff000200fb000000100065006f00700066006f006900620000003d0000021fb00000010004e00690062000760066006e00640020000ffff000100065006f00700066006f0069006200000046000021fb00000010006b00690062000760066006e00640020000fffffffffffffb000000200068006f00700066006f0069006200000048000021fb000000100068006f00700066006f006900620000004b0000021fb00000010006900690062000770066006e00640020000ffff000100069006f00700066006f006900620000004b0000021fb00000010006a00690062000770066006e00640020000ffff000200069006f00700066006f006900620000004b0000021fb00000010006a006f00700066006f006900620000004d0000021fb00000010006b00690062000770066006e00640020000ffff00010006b006f00700066006f006900620000004f0000021fb00000010006b00690062000770066006e00660020000fffffffffffffb00000010006b00690062000770066006e00660020000ffff00010006b006f00700066006f006900620000004c0000021fb00000020006b00690062000770066006e00660020000fffffffffffffb00000020006d006f00700074006f006900620000004d0000021fb00000020006d006f00700074006f006900620000004e0000021fb00000010006e00690062000760066006e00640020000ffff00020006d006f00700074006f006900620000004f0000021fb00000010006e00690062000760066006e00640020000ffff00020006e006f00700066006f006900620000004f0000021fb00000010006e00690062000760066006e00640020000ffff00020006e006f00700066006f006900620000004f0000021fb00000020006e006f00700066006e00640020000ffff00020006e006f00700066006f0069006200000052000021fb00000010006f00690062000770066006e00640020000ffff00020006f00700066006f0069006200000053000021fb00000010006f00700066006f006900620000004c0000021fb00000020006f00700066006f006900620000004f0000021fb00000010006f00700066006f0069006200000054000021fb00000010006f00700066006f0069006200000055000021fb00000010006f00700066006f0069006200000055000021fb00000020006f00700066006f0069006200000055000021fb00000020006f00700066006f0069006200000055000021fb00000010006f00700066006f0069006200000057000021bg
+  Width: 1200
+  X: 100
+  Y: 100

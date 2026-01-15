@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional
 
 from brain.planning.models import Location, Door
+from brain.cognitive.world_model.planning_context import PlanningContext
 
 
 class IWorldModel(ABC):
@@ -151,3 +152,47 @@ class IWorldModel(ABC):
             物体名称列表
         """
         pass
+
+    @abstractmethod
+    def get_semantic_objects(
+        self,
+        category: Optional[str] = None,
+        position_filter: Optional[Dict[str, float]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        查询语义物体（直接访问原始数据）
+
+        Args:
+            category: 可选的类别过滤（如"door", "chair"）
+            position_filter: 可选的位置过滤 {"x": 0, "y": 0, "radius": 5.0}
+
+        Returns:
+            语义物体列表，每个物体包含 id, label, position, confidence, state, attributes
+        """
+        pass
+
+    @abstractmethod
+    def get_fused_context(self) -> PlanningContext:
+        """
+        获取融合后的规划上下文
+
+        Returns:
+            包含三模态数据的PlanningContext：
+            - semantic_objects: 语义物体列表
+            - causal_graph: 因果关系数据
+            - state_predictions: 状态预测
+        """
+        pass
+
+    def get_object_affordances(self, object_id: str) -> List[str]:
+        """
+        获取物体可执行的操作（功能推理）
+
+        Args:
+            object_id: 物体ID
+
+        Returns:
+            可执行的操作列表（如["open", "close", "pass_through"]）
+        """
+        # 默认实现：返回通用操作
+        return ["approach", "observe", "point_at"]

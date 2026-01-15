@@ -1,0 +1,22 @@
+WorldModel可视化诊断报告
+时间: 2026-01-09 11:14:53
+================================================================================
+
+测试结果:
+  ❌ world_model_status: INSTANTIATED
+  ✅ semantic_grid: OK
+  ⚠️ semantic_markers: EMPTY
+  ✅ trajectory: OK
+  ✅ frontiers: OK
+  ⚠️ belief_markers: EMPTY
+  ❌ change_markers: ERROR
+  ⚠️ vlm_markers: EMPTY
+
+错误 (1):
+  1. change_markers生成错误: 'dict' object is not callable
+
+警告 (4):
+  1. current_map为None，创建默认值
+  2. semantic_markers为空
+  3. belief_markers为空或belief_policy未启用
+  4. vlm_markers为空（需要VLM检测数据）

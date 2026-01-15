@@ -7,10 +7,24 @@
 from .dynamic_planner import DynamicPlanner
 from .replanning_rules import ReplanningRules
 from .plan_validator import PlanValidator, PlanValidation
+from .failure_types import FailureType
+from .replanning_manager import (
+    ReplanningManager,
+    ReplanningTrigger,
+    ReplanningStrategy,
+    ReplanningDecision,
+    EnvironmentChange
+)
 
 __all__ = [
     "DynamicPlanner",
     "ReplanningRules",
     "PlanValidator",
     "PlanValidation",
+    "FailureType",
+    "ReplanningManager",
+    "ReplanningTrigger",
+    "ReplanningStrategy",
+    "ReplanningDecision",
+    "EnvironmentChange",
 ]

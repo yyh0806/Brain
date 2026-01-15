@@ -184,9 +184,131 @@ world_model_interface = load_module_isolated(
     }
 )
 IWorldModel = world_model_interface.IWorldModel
+Location = world_model_interface.Location
+
+# 加载新的接口（planning_io 和 cognitive_world_adapter）
+# 这些需要认知层的类型，创建mock
+from unittest.mock import Mock
+from datetime import datetime
+from dataclasses import dataclass
+from typing import Dict, List, Any
+
+# 创建认知层类型的mock
+@dataclass
+class MockPlanningContext:
+    current_position: Dict[str, float]
+    current_heading: float
+    obstacles: List[Dict[str, Any]]
+    targets: List[Dict[str, Any]]
+    points_of_interest: List[Dict[str, Any]]
+    weather: Dict[str, Any]
+    battery_level: float
+    signal_strength: float
+    available_paths: List[Dict[str, Any]]
+    constraints: List[str]
+    recent_changes: List[Dict[str, Any]]
+    risk_areas: List[Dict[str, Any]]
+
+@dataclass
+class MockBelief:
+    id: str
+    content: str
+    confidence: float
+    falsified: bool = False
+
+@dataclass
+class MockReasoningResult:
+    mode: str
+    query: str
+    confidence: float
+
+# 动态创建 planning_io 模块
+import sys
+import types
+planning_io_module = types.ModuleType("brain.planning.interfaces.planning_io")
+planning_io_module.PlanState = sys.modules.get("brain.planning.state.plan_state")
+planning_io_module.PlanNode = sys.modules.get("brain.planning.state.plan_node")
+planning_io_module.NodeStatus = sys.modules.get("brain.planning.state.plan_node").NodeStatus if planning_io_module.PlanNode else None
+planning_io_module.MockPlanningContext = MockPlanningContext
+planning_io_module.MockBelief = MockBelief
+planning_io_module.MockReasoningResult = MockReasoningResult
+planning_io_module.datetime = datetime
+
+# 创建枚举
+from enum import Enum
+class MockPlanningStatus(Enum):
+    SUCCESS = "success"
+    FAILURE = "failure"
+    PARTIAL = "partial"
+    CLARIFICATION_NEEDED = "clarification"
+    REJECTED = "rejected"
+
+planning_io_module.PlanningStatus = MockPlanningStatus
+planning_io_module.Enum = Enum
+planning_io_module.dataclass = dataclass
+
+# 定义 PlanningInput 和 PlanningOutput
+@dataclass
+class MockPlanningInput:
+    command: str
+    reasoning_result: Any = None
+    planning_context: Any = None
+    beliefs: List[Any] = None
+    timestamp: datetime = None
+    metadata: Dict[str, Any] = None
+
+@dataclass
+class MockPlanningOutput:
+    plan_state: Any
+    planning_status: MockPlanningStatus
+    estimated_duration: float
+    success_rate: float
+    resource_requirements: List[str] = None
+    clarification_request: str = None
+    rejection_reason: str = None
+    planning_log: List[str] = None
+    timestamp: datetime = None
+    metadata: Dict[str, Any] = None
+
+@dataclass
+class MockReplanningInput:
+    current_plan: Any
+    current_node_id: str = None
+    environment_changes: List[Dict[str, Any]] = None
+    failed_actions: List[str] = None
+    new_beliefs: List[Any] = None
+    trigger_reason: str = ""
+    urgency: str = "normal"
+    timestamp: datetime = None
+    metadata: Dict[str, Any] = None
+
+@dataclass
+class MockReplanningOutput:
+    new_plan: Any
+    replanning_type: str
+    modified_nodes: List[str] = None
+    added_nodes: List[str] = None
+    removed_nodes: List[str] = None
+    success: bool = True
+    reason: str = ""
+    timestamp: datetime = None
+    metadata: Dict[str, Any] = None
+
+planning_io_module.PlanningInput = MockPlanningInput
+planning_io_module.PlanningOutput = MockPlanningOutput
+planning_io_module.ReplanningInput = MockReplanningInput
+planning_io_module.ReplanningOutput = MockReplanningOutput
+
+sys.modules["brain.planning.interfaces.planning_io"] = planning_io_module
 
 # 更新 brain.planning.interfaces 模块，使其包含导出的类
 sys.modules["brain.planning.interfaces"].IWorldModel = IWorldModel
+sys.modules["brain.planning.interfaces"].Location = Location
+sys.modules["brain.planning.interfaces"].PlanningInput = MockPlanningInput
+sys.modules["brain.planning.interfaces"].PlanningOutput = MockPlanningOutput
+sys.modules["brain.planning.interfaces"].ReplanningInput = MockReplanningInput
+sys.modules["brain.planning.interfaces"].ReplanningOutput = MockReplanningOutput
+sys.modules["brain.planning.interfaces"].PlanningStatus = MockPlanningStatus
 
 # 加载action_level（依赖interfaces）
 world_model_mock_module = load_module_isolated(
@@ -262,12 +384,21 @@ sys.modules["brain.planning.planners"].SkillLevelPlanner = SkillLevelPlanner
 sys.modules["brain.planning.planners"].TaskLevelPlanner = TaskLevelPlanner
 
 # 加载intelligent（有execution依赖，使用mock）
+# 先加载 failure_types
+failure_types_module = load_module_isolated(
+    "brain.planning.intelligent.failure_types",
+    planning_root / "intelligent" / "failure_types.py",
+    dependent_modules={}
+)
+FailureType = failure_types_module.FailureType
+
 dynamic_planner_module = load_module_isolated(
     "brain.planning.intelligent.dynamic_planner",
     planning_root / "intelligent" / "dynamic_planner.py",
     dependent_modules={
         "brain.planning.state.plan_node": planning_root / "state" / "plan_node.py",
-        "brain.planning.action_level.world_model_mock": planning_root / "action_level" / "world_model_mock.py"
+        "brain.planning.action_level.world_model_mock": planning_root / "action_level" / "world_model_mock.py",
+        "brain.planning.intelligent.failure_types": planning_root / "intelligent" / "failure_types.py"
     }
 )
 DynamicPlanner = dynamic_planner_module.DynamicPlanner
@@ -276,7 +407,8 @@ replanning_rules_module = load_module_isolated(
     "brain.planning.intelligent.replanning_rules",
     planning_root / "intelligent" / "replanning_rules.py",
     dependent_modules={
-        "brain.planning.state.plan_node": planning_root / "state" / "plan_node.py"
+        "brain.planning.state.plan_node": planning_root / "state" / "plan_node.py",
+        "brain.planning.intelligent.failure_types": planning_root / "intelligent" / "failure_types.py"
     }
 )
 ReplanningRules = replanning_rules_module.ReplanningRules
@@ -293,6 +425,7 @@ PlanValidation = plan_validator_module.PlanValidation
 PlanValidator = plan_validator_module.PlanValidator
 
 # 更新 brain.planning.intelligent 模块
+sys.modules["brain.planning.intelligent"].FailureType = FailureType
 sys.modules["brain.planning.intelligent"].DynamicPlanner = DynamicPlanner
 sys.modules["brain.planning.intelligent"].ReplanningRules = ReplanningRules
 sys.modules["brain.planning.intelligent"].PlanValidation = PlanValidation

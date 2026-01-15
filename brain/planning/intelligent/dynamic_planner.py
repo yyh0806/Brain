@@ -9,7 +9,7 @@ from loguru import logger
 
 from brain.planning.state import PlanNode, NodeStatus
 from brain.planning.action_level import WorldModelMock
-from brain.execution.monitor import FailureType
+from brain.planning.intelligent.failure_types import FailureType
 
 
 class DynamicPlanner:

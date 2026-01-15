@@ -47,3 +47,4 @@ scene_description = await vlm.describe_scene(perception_data.rgb_image)
 
 
 
+

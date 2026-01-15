@@ -1,0 +1,112 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 80
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+      Splitter Ratio: 0.5
+    Tree Height: 447
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+
+    - Class: rviz_default_plugins/Image
+      Name: Camera Image
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /car3/rgbImage/decompressed
+        Transport Hint: compressed
+
+    - Class: rviz_default_plugins/PointCloud2
+      Name: LiDAR PointCloud
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /car3/lidar_points
+      Size (m): 0.05
+      Size (Pixels): 3
+
+    - Class: rviz_default_plugins/Map
+      Name: Semantic Grid - Geometric Map
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/semantic_grid
+
+    - Class: rviz_default_plugins/MarkerArray
+      Name: VLM Detections - Semantic Map
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /vlm/detections
+
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Causal Graph - Causal Map
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/causal_graph
+
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Semantic Objects
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/semantic_markers
+
+    - Class: rviz_default_plugins/Path
+      Name: Robot Trajectory
+      Enabled: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /world_model/trajectory
+
+  Global Options:
+    Fixed Frame: map
+    Frame Rate: 30
+
+Window Geometry:
+  Qt:
+    collapsed: false
+  QMainWindow:
+    collapsed: false
+    geometry: 0,0,1920,1080
+    state: "{\"geometry\":{\"_rect\":{\"x\":0,\"y\":0,\"width\":1920,\"height\":1080,\"windowTitle\":\"三模态融合WorldModel\"}}"
+  Toolbars:
+    toolBar: false
+    toolBar-2: false
+    toolBar-3: false
+  Views:
+    current: []

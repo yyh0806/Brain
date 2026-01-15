@@ -1,0 +1,294 @@
+Panels:
+  - Class: rviz_common/Displays
+    Help Height: 480
+    Name: Displays
+
+  - Class: rviz_common/Displays
+    Help Height: 480
+    Name: Displays
+
+Displays:
+  - Class: nav_msgs/OccupancyGrid
+    Help Height: 400
+    Name: Semantic Occupancy Grid
+    
+  - Class: visualization_msgs/MarkerArray
+    Help Height: 400
+    Name: Semantic Objects
+    
+  - Class: visualization_msgs/MarkerArray
+    Help Height: 400
+    Name: Belief Markers
+    
+  - Class: nav_msgs/Path
+    Help Height: 400
+    Name: Robot Trajectory
+    
+  - Class: visualization_msgs/MarkerArray
+    Help Height: 400
+    Name: Exploration Frontiers
+    
+  - Class: visualization_msgs/MarkerArray
+    Help Height: 400
+    Name: Change Events
+    
+  - Class: visualization_msgs/MarkerArray
+    Help Height: 400
+    Name: VLM Detections
+
+Visualization Manager:
+  Class: rviz/VisualizationManager
+  Name: Visualization Manager
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: map
+    Frame Rate: 30
+
+Preferences:
+  - Class: rviz_common/Preferences
+    Name: Preferences
+
+Tool Properties:
+  - Class: rviz/Tool Properties
+    Name: Tool Properties
+    - Property tree style: 1
+    - Property tree show all: 1
+    - Show help: 1
+
+-----
+
+# PointCloud2 Display (/front_3d_lidar/lidar_points)
+Class: rviz/PointCloud2
+Name: Nova Carter 3D LiDAR
+Topic: /front_3d_lidar/lidar_points
+Name: Nova_Carter_3D_LiDAR_Qt
+
+# Size (m)
+Class: rviz/PointCloud2
+Name: Nova Carter LiDAR Size
+Value: 20
+
+# Style
+Class: rviz/PointCloud2
+Name: Nova Carter LiDAR Style
+Value: Flat Shading
+
+# Color Transformer
+Class: rviz/PointCloud2
+Name: Nova Carter Color Transformer
+Value: AxisColor
+
+# Position Transformer
+Class: rviz/PointCloud2
+Name: Nova Carter Position Transformer
+Value: XYZ
+
+# Auto Size
+Class: rviz/PointCloud2
+Name: Nova Carter Auto Size
+Value: false
+
+-----
+
+# Odometry Display (/chassis/odom)
+Class: nav_msgs/Odometry
+Name: Nova Carter Odometry
+Topic: /chassis/odom
+Name: Nova_Carter_Odometry_Qt
+
+# Shape
+Class: rviz/Odometry
+Name: Shape
+Value: Arrow
+
+# Color
+Class: rviz/Odometry
+Name: Color
+Value: 255; 85; 0
+
+# Keep
+Class: rviz/Odometry
+Name: Keep
+Value: 100
+
+-----
+
+# Image Display (/front_stereo_camera/left/image_raw)
+Class: sensor_msgs/Image
+Name: Nova Carter RGB Camera
+Topic: /front_stereo_camera/left/image_raw
+Name: Nova_Carter_Camera_Qt
+
+# Image Rendering
+Class: sensor_msgs/Image
+Name: Image Rendering
+Value: bilinear
+
+# Transport Hint
+Class: sensor_msgs/Image
+Name: Transport Hint
+Value: raw
+
+# Queue Size
+Class: sensor_msgs/Image
+Name: Queue Size
+Value: 10
+
+# Min Value
+Class: sensor_msgs/Image
+Name: Min Value
+Value: 0
+
+# Max Value
+Class: sensor_msgs/Image
+Name: Max Value
+Value: 255
+
+-----
+
+# OccupancyGrid Display (Occupancy Map from WorldModel)
+Class: nav_msgs/OccupancyGrid
+Name: Nova Carter Occupancy Map
+Topic: /map
+Name: Nova_Carter_Map_Qt
+
+# Alpha
+Class: nav_msgs/OccupancyGrid
+Name: Alpha
+Value: 0.7
+
+# Color
+Class: nav_msgs/OccupancyGrid
+Name: Color
+Value: 200; 10; 10
+Name: Nova Carter Map Color
+Value: 0; 200; 10
+Name: Alpha
+Value: 0.8
+
+-----
+
+# RobotModel Display (World Model)
+Class: rviz/RobotModel
+Name: Nova Carter World Model
+Topic: /world_model
+Name: Nova_Carter_WorldModel_Qt
+
+# Pose Topic
+Class: rviz/RobotModel
+Name: Pose Topic
+Value: /robot_pose
+
+# Shape
+Class: rviz/RobotModel
+Name: Shape
+Value: Mesh
+
+# Color
+Class: rviz/RobotModel
+Name: Color
+Value: 30; 144; 255
+
+# Alpha
+Class: rviz/RobotModel
+Name: Alpha
+Value: 1.0
+
+# Show Robot Path
+Class: rviz/RobotModel
+Name: Show Robot Path
+Value: true
+
+# Show Robot Orientation
+Class: rviz/RobotModel
+Name: Show Robot Orientation
+Value: true
+
+# Show Namespaces
+Class: rviz/RobotModel
+Name: Show Namespaces
+Value: true
+
+-----
+
+# Semantic Occupancy Grid Display (/world_model/semantic_grid)
+Class: nav_msgs/OccupancyGrid
+Name: Semantic Occupancy Grid
+Topic: /world_model/semantic_grid
+Name: Semantic_Occupancy_Grid_Qt
+
+# Alpha
+Class: nav_msgs/OccupancyGrid
+Name: Alpha
+Value: 0.7
+
+# Color Scheme
+Class: nav_msgs/OccupancyGrid
+Name: Color Scheme
+Value: map
+
+-----
+
+# Semantic Objects Display (/world_model/semantic_markers)
+Class: visualization_msgs/MarkerArray
+Name: Semantic Objects
+Topic: /world_model/semantic_markers
+Name: Semantic_Objects_Qt
+
+-----
+
+# Belief Markers Display (/world_model/belief_markers)
+Class: visualization_msgs/MarkerArray
+Name: Belief Markers
+Topic: /world_model/belief_markers
+Name: Belief_Markers_Qt
+
+-----
+
+# Robot Trajectory Display (/world_model/trajectory)
+Class: nav_msgs/Path
+Name: Robot Trajectory
+Topic: /world_model/trajectory
+Name: Robot_Trajectory_Qt
+
+# Color
+Class: nav_msgs/Path
+Name: Color
+Value: 0; 200; 100
+
+# Line Width
+Class: nav_msgs/Path
+Name: Line Width
+Value: 0.1
+
+-----
+
+# Exploration Frontiers Display (/world_model/frontiers)
+Class: visualization_msgs/MarkerArray
+Name: Exploration Frontiers
+Topic: /world_model/frontiers
+Name: Exploration_Frontiers_Qt
+
+-----
+
+# Change Events Display (/world_model/change_events)
+Class: visualization_msgs/MarkerArray
+Name: Change Events
+Topic: /world_model/change_events
+Name: Change_Events_Qt
+
+-----
+
+# VLM Detections Display (/vlm/detections)
+Class: visualization_msgs/MarkerArray
+Name: VLM Detections
+Topic: /vlm/detections
+Name: VLM_Detections_Qt
+
+
+
+
+
+
+
+

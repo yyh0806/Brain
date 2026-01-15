@@ -1,0 +1,97 @@
+# SLAM集成配置文件
+# Brain项目 - SLAM层配置
+
+slam:
+  # SLAM系统选择: "fast_livo", "lio_sam", "cartographer", "slam_toolbox"
+  backend: "fast_livo"
+
+  # 传感器配置
+  sensors:
+    lidar:
+      topic: "/velodyne_points"  # 激光雷达点云话题
+      type: "velodyne"           # 传感器类型
+      max_range: 100.0           # 最大范围(米)
+      min_range: 0.5             # 最小范围(米)
+
+    camera:
+      topic: "/camera/rgb/image_raw"  # 相机图像话题
+      depth_topic: "/camera/depth/image_raw"  # 深度图话题
+      fx: 525.0                      # 焦距x
+      fy: 525.0                      # 焦距y
+      cx: 319.5                      # 主点x
+      cy: 239.5                      # 主点y
+
+    imu:
+      topic: "/imu/data"             # IMU话题
+      acc_noise: 0.01                # 加速度计噪声
+      gyr_noise: 0.001               # 陀螺仪噪声
+      acc_bias: 0.0002               # 加速度计偏差
+      gyr_bias: 0.00003              # 陀螺仪偏差
+
+    odom:
+      topic: "/odom"                 # 里程计话题
+
+  # 外参标定 (传感器之间的变换)
+  extrinsics:
+    T_lidar_to_camera: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # [x, y, z, roll, pitch, yaw]
+    T_lidar_to_imu: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    T_camera_to_imu: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+  # SLAM配置
+  mapping:
+    resolution: 0.1              # 地图分辨率(米/栅格)
+    map_size: 2000              # 地图大小(栅格)
+    map_update_interval: 0.1    # 地图更新间隔(秒)
+    init_pose: [0.0, 0.0, 0.0, 1.0]  # 初始位姿 [x, y, z, w(四元数)]
+
+  # 回环检测
+  loop_closure:
+    enable: true                # 启用回环检测
+    keyframe_gap: 30            # 关键帧间隔
+    similarity_threshold: 0.7   # 相似度阈值
+    icp_threshold: 0.5          # ICP阈值
+
+  # 场景自适应
+  scene_adaptation:
+    # 室内场景配置
+    indoor:
+      visual_weight: 0.7        # 视觉权重
+      lidar_weight: 0.3         # 激光权重
+      gps_weight: 0.0           # GPS权重(室内不使用)
+
+    # 室外场景配置
+    outdoor:
+      visual_weight: 0.3
+      lidar_weight: 0.5
+      gps_weight: 0.2
+
+    # 混合场景配置
+    mixed:
+      visual_weight: 0.5
+      lidar_weight: 0.4
+      gps_weight: 0.1
+
+  # 性能优化
+  performance:
+    use_odom_prior: true        # 使用里程计先验
+    enable_downsampling: true   # 启用降采样
+    voxel_size: 0.2             # 体素大小(米)
+    max_points: 50000           # 最大点云点数
+
+# 认知层集成配置
+cognitive_integration:
+  # SLAM地图发布
+  map_topic: "/map"
+  pose_topic: "/pose"
+  path_topic: "/path"
+
+  # 零拷贝引用
+  zero_copy: true
+  update_frequency: 10.0       # 地图更新频率(Hz)
+
+  # 坐标系
+  frames:
+    map: "map"                  # 全局地图坐标系
+    odom: "odom"                # 里程计坐标系
+    base_link: "base_link"      # 机器人本体坐标系
+    sensor_link: "sensor_link"  # 传感器坐标系

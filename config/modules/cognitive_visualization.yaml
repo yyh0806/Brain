@@ -1,0 +1,111 @@
+# 认知层可视化配置
+
+cognitive_visualization:
+  enabled: true
+  ros_domain_id: 42
+  
+  # 信念可视化配置
+  belief_visualization:
+    enabled: true
+    publish_rate: 1.0  # Hz
+    marker_namespace: "belief_markers"
+    marker_lifetime: 1.0  # 秒
+    
+    # 置信度阈值
+    high_confidence_threshold: 0.8
+    medium_confidence_threshold: 0.5
+    
+    # 颜色配置
+    colors:
+      high_confidence: [0, 1, 0, 0.7]  # 绿色
+      medium_confidence: [1, 1, 0, 0.7]  # 黄色
+      low_confidence: [1, 0, 0, 0.7]  # 红色
+      falsified: [0.5, 0.5, 0.5, 0.3]  # 灰色
+    
+    # 大小配置
+    sizes:
+      high: 0.3  # 米
+      medium: 0.2
+      low: 0.1
+  
+  # VLM可视化配置
+  vlm_visualization:
+    enabled: true
+    publish_rate: 2.0  # Hz
+    show_bboxes: true
+    show_labels: true
+    show_confidence: true
+    
+    # 文字配置
+    text:
+      label_scale: 0.3
+      confidence_scale: 0.2
+      label_height: 1.5
+      confidence_height: 0.5
+    
+    # 颜色配置
+    colors:
+      door: [0, 0, 1, 0.8]  # 蓝色
+      person: [1, 0, 0, 0.8]  # 红色
+      building: [0, 0.5, 0, 0.8]  # 绿色
+      target: [0.5, 0, 0.5, 0.8]  # 紫色
+      obstacle: [1, 0.5, 0, 0.8]  # 橙色
+  
+  # 探索边界可视化配置
+  frontier_visualization:
+    enabled: true
+    publish_rate: 2.0  # Hz
+    show_priority_text: true
+    show_distance_text: true
+    
+    # 优先级配置
+    priority_levels:
+      high:
+        threshold: 0.8
+        arrow_length: 1.5
+        arrow_width: 0.3
+        color: [0, 1, 0, 0.9]  # 亮绿色
+      medium:
+        threshold: 0.5
+        arrow_length: 1.0
+        arrow_width: 0.2
+        color: [1, 1, 0, 0.8]  # 黄色
+      low:
+        threshold: 0.0
+        arrow_length: 0.5
+        arrow_width: 0.1
+        color: [0.5, 0.5, 0.5, 0.6]  # 灰色
+  
+  # 变化事件可视化配置
+  change_event_visualization:
+    enabled: true
+    publish_rate: 2.0  # Hz
+    marker_lifetime: 5.0  # 秒
+    
+    # 变化类型配置
+    change_types:
+      new_obstacle:
+        marker_type: CYLINDER
+        color: [1, 0.5, 0, 0.8]  # 橙色
+        scale: [0.5, 0.5, 0.2]
+      target_moved:
+        marker_type: CYLINDER
+        color: [0.5, 0, 0.5, 0.8]  # 紫色
+        scale: [0.5, 0.5, 0.2]
+      path_blocked:
+        marker_type: LINE_LIST
+        color: [1, 0, 0, 0]  # 红色
+        scale: [0.2, 0.2, 0.2]
+      obstacle_moved:
+        marker_type: CYLINDER
+        color: [1, 1, 0, 0]  # 黄色
+        scale: [0.4, 0.4, 0.2]
+      target_appeared:
+        marker_type: CYLINDER
+        color: [0, 1, 0, 0]  # 绿色
+        scale: [0.5, 0.5, 0.2]
+      obstacle_removed:
+        marker_type: LINE_STRIP
+        color: [0, 0, 1, 0.7]  # 蓝色
+        scale: [0.3, 0.3, 0.3]
+

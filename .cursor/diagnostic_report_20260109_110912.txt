@@ -1,0 +1,23 @@
+WorldModel可视化诊断报告
+时间: 2026-01-09 11:09:12
+================================================================================
+
+测试结果:
+  ❌ world_model_status: INSTANTIATED
+  ✅ semantic_grid: OK
+  ⚠️ semantic_markers: EMPTY
+  ✅ trajectory: OK
+  ❌ frontiers: ERROR
+  ⚠️ belief_markers: EMPTY
+  ❌ change_markers: ERROR
+  ⚠️ vlm_markers: EMPTY
+
+错误 (2):
+  1. frontiers生成错误: 'ExplorationFrontier' object has no attribute 'center_x'
+  2. change_markers生成错误: The 'x' field must be of type 'float'
+
+警告 (4):
+  1. current_map为None，创建默认值
+  2. semantic_markers为空
+  3. belief_markers为空或belief_policy未启用
+  4. vlm_markers为空（需要VLM检测数据）
